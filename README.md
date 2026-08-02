@@ -79,7 +79,7 @@ bun run release:push
 | `WORKFLOW_MANAGER_RP_NAME` | 서비스 이름 | 패스키 등록 화면에 표시할 서비스 이름 |
 | `WORKFLOW_MANAGER_ORIGIN` | `http://localhost:<PORT>` | 패스키를 등록·사용할 정확한 origin |
 
-헤더의 `환경설정` 화면에서는 서비스 이름·헤더 보조 문구·홈 제목·설명을 즉시 변경할 수 있습니다. 접근 범위와 데이터 디렉터리는 프로젝트 루트의 `.env`에 저장된 뒤 서버를 재시작하면 적용됩니다. `HOST`, `PORT`, `WORKFLOW_MANAGER_DB`는 화면에 노출하지 않으며 `.env`나 서버 실행 환경에서 직접 관리합니다. 그 밖의 프로세스 환경 변수와 비밀값도 화면과 API에 노출하지 않습니다.
+헤더의 `환경설정` 화면에서는 서비스 이름·헤더 보조 문구·홈 제목·설명을 즉시 변경할 수 있습니다. 접근 범위와 데이터 디렉터리는 기본적으로 현재 작업 디렉터리의 `.env`에 저장된 뒤 서버를 재시작하면 적용됩니다. 서비스 관리자에서 작업 디렉터리가 달라질 때는 `WORKFLOW_MANAGER_CONFIG_FILE`로 읽고 쓸 `.env` 경로를 지정하세요. `HOST`, `PORT`, `WORKFLOW_MANAGER_DB`는 화면에 노출하지 않으며 `.env`나 서버 실행 환경에서 직접 관리합니다. 그 밖의 프로세스 환경 변수와 비밀값도 화면과 API에 노출하지 않습니다.
 
 기본 `private` 모드는 다음 주소의 직접 접속만 허용합니다.
 
@@ -117,7 +117,7 @@ WORKFLOW_MANAGER_RP_ID="flow.example.com"
 WORKFLOW_MANAGER_ORIGIN="https://flow.example.com"
 ```
 
-이 설정이 로드되면 서버 시작 시 최초 패스키 설정 주소도 `https://flow.example.com/#/setup?token=...` 형태로 출력됩니다. macOS `launchd`로 실행할 때는 `WorkingDirectory`를 `.env`가 있는 디렉터리로 지정하거나, 같은 값을 서비스 환경 변수로 전달해야 합니다. `WORKFLOW_MANAGER_ORIGIN`이 없으면 안전한 기본값인 `localhost`가 사용되고 시작 로그에 경고가 표시됩니다.
+이 설정이 로드되면 서버 시작 시 최초 패스키 설정 주소도 `https://flow.example.com/#/setup?token=...` 형태로 출력됩니다. macOS `launchd`로 실행할 때는 `WorkingDirectory`를 `.env`가 있는 디렉터리로 지정하거나, `WORKFLOW_MANAGER_CONFIG_FILE`을 서비스 환경 변수로 지정해야 합니다. `WORKFLOW_MANAGER_ORIGIN`이 없으면 안전한 기본값인 `localhost`가 사용되고 시작 로그에 경고가 표시됩니다.
 
 Relying Party ID가 바뀌면 기존 패스키는 새 주소에서 사용할 수 없습니다. 로컬 테스트에서 운영 도메인으로 옮길 때 운영 환경에서 패스키를 다시 등록해야 합니다. 관리자 설정 이후 환경설정 화면에서 패스키를 추가하거나 삭제할 수 있으며, 잠금을 방지하기 위해 마지막 패스키는 삭제할 수 없습니다.
 

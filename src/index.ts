@@ -4,6 +4,7 @@ import { WorkflowRunner } from "./runner/runner";
 import { createApp } from "./server/app";
 import {
   EnvironmentSettings,
+  readEnvironmentFile,
   type EnvironmentValues,
 } from "./server/environment-settings";
 import {
@@ -24,31 +25,44 @@ const defaultEnvironment: EnvironmentValues = {
   WORKFLOW_MANAGER_DATA_DIR: defaultDataDirectory,
 };
 
-const port = Number(Bun.env.PORT ?? 3000);
-const hostname = Bun.env.HOST ?? "0.0.0.0";
-const accessMode = parseAccessMode(Bun.env.WORKFLOW_MANAGER_ACCESS_MODE);
+const environmentFilePath = resolve(
+  Bun.env.WORKFLOW_MANAGER_CONFIG_FILE ?? join(process.cwd(), ".env"),
+);
+const configuredEnvironment = readEnvironmentFile(environmentFilePath);
+const environmentValue = (key: string) =>
+  configuredEnvironment[key] ?? Bun.env[key];
+
+const port = Number(environmentValue("PORT") ?? 3000);
+const hostname = environmentValue("HOST") ?? "0.0.0.0";
+const accessMode = parseAccessMode(
+  environmentValue("WORKFLOW_MANAGER_ACCESS_MODE"),
+);
 const dataDirectory = resolve(
-  Bun.env.WORKFLOW_MANAGER_DATA_DIR ??
+  environmentValue("WORKFLOW_MANAGER_DATA_DIR") ??
     defaultEnvironment.WORKFLOW_MANAGER_DATA_DIR,
 );
 const publicDirectory = resolve(
-  Bun.env.WORKFLOW_MANAGER_PUBLIC_DIR ?? join(import.meta.dir, "web"),
+  environmentValue("WORKFLOW_MANAGER_PUBLIC_DIR") ??
+    join(import.meta.dir, "web"),
 );
 const databasePath = resolve(
-  Bun.env.WORKFLOW_MANAGER_DB ?? join(dataDirectory, "workflow-manager.sqlite"),
+  environmentValue("WORKFLOW_MANAGER_DB") ??
+    join(dataDirectory, "workflow-manager.sqlite"),
 );
 const environmentSettings = new EnvironmentSettings({
-  filePath: join(process.cwd(), ".env"),
+  filePath: environmentFilePath,
   currentValues: {
     WORKFLOW_MANAGER_NAME:
-      Bun.env.WORKFLOW_MANAGER_NAME ?? defaultEnvironment.WORKFLOW_MANAGER_NAME,
+      environmentValue("WORKFLOW_MANAGER_NAME") ??
+      defaultEnvironment.WORKFLOW_MANAGER_NAME,
     WORKFLOW_MANAGER_TAGLINE:
-      Bun.env.WORKFLOW_MANAGER_TAGLINE ??
+      environmentValue("WORKFLOW_MANAGER_TAGLINE") ??
       defaultEnvironment.WORKFLOW_MANAGER_TAGLINE,
     WORKFLOW_MANAGER_TITLE:
-      Bun.env.WORKFLOW_MANAGER_TITLE ?? defaultEnvironment.WORKFLOW_MANAGER_TITLE,
+      environmentValue("WORKFLOW_MANAGER_TITLE") ??
+      defaultEnvironment.WORKFLOW_MANAGER_TITLE,
     WORKFLOW_MANAGER_DESCRIPTION:
-      Bun.env.WORKFLOW_MANAGER_DESCRIPTION ??
+      environmentValue("WORKFLOW_MANAGER_DESCRIPTION") ??
       defaultEnvironment.WORKFLOW_MANAGER_DESCRIPTION,
     WORKFLOW_MANAGER_ACCESS_MODE: accessMode,
     WORKFLOW_MANAGER_DATA_DIR: dataDirectory,
@@ -59,13 +73,13 @@ const environmentSettings = new EnvironmentSettings({
 const db = new AppDatabase(databasePath);
 const interruptedCount = db.recoverInterruptedRuns();
 const runner = new WorkflowRunner(db);
-const configuredPasskeyOrigin = Bun.env.WORKFLOW_MANAGER_ORIGIN;
+const configuredPasskeyOrigin = environmentValue("WORKFLOW_MANAGER_ORIGIN");
 const passkeyOrigin =
   configuredPasskeyOrigin ?? `http://localhost:${port}`;
 const passkeyAuth = new PasskeyAuth(db, {
-  rpID: Bun.env.WORKFLOW_MANAGER_RP_ID ?? "localhost",
+  rpID: environmentValue("WORKFLOW_MANAGER_RP_ID") ?? "localhost",
   rpName:
-    Bun.env.WORKFLOW_MANAGER_RP_NAME ??
+    environmentValue("WORKFLOW_MANAGER_RP_NAME") ??
     environmentSettings.applicationSettings().name,
   expectedOrigin: passkeyOrigin,
 });

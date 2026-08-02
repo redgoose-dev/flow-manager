@@ -110,12 +110,27 @@ function decodeValue(raw: string) {
   return value;
 }
 
+function parsedValues(content: string) {
+  const values: Record<string, string> = {};
+  for (const line of envLines(content)) {
+    const key = keyFromLine(line);
+    if (!key) continue;
+    values[key] = decodeValue(line.slice(line.indexOf("=") + 1));
+  }
+  return values;
+}
+
+export function readEnvironmentFile(filePath: string) {
+  if (!existsSync(filePath)) return {};
+  return parsedValues(readFileSync(filePath, "utf8"));
+}
+
 function managedValues(content: string) {
   const values = new Map<EnvironmentVariableKey, string>();
-  for (const line of envLines(content)) {
-    const key = keyFromLine(line) as EnvironmentVariableKey | null;
+  for (const [rawKey, value] of Object.entries(parsedValues(content))) {
+    const key = rawKey as EnvironmentVariableKey;
     if (!key || !DEFINITION_BY_KEY.has(key)) continue;
-    values.set(key, decodeValue(line.slice(line.indexOf("=") + 1)));
+    values.set(key, value);
   }
   return values;
 }

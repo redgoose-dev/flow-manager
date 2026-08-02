@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   EnvironmentSettings,
+  readEnvironmentFile,
   type EnvironmentValues,
 } from "../src/server/environment-settings";
 
@@ -74,5 +75,17 @@ describe("EnvironmentSettings", () => {
     ).toThrow(
       "private 또는 local",
     );
+  });
+
+  test("환경 파일의 인용값과 export 형식을 읽는다", () => {
+    writeFileSync(
+      filePath,
+      'export WORKFLOW_MANAGER_ACCESS_MODE="private"\nPORT=3000\n# comment\n',
+    );
+
+    expect(readEnvironmentFile(filePath)).toEqual({
+      WORKFLOW_MANAGER_ACCESS_MODE: "private",
+      PORT: "3000",
+    });
   });
 });
