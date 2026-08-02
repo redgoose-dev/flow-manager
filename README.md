@@ -54,7 +54,7 @@ bun run build
 bun run release
 
 # 릴리스 커밋과 태그를 origin에 함께 전송
-bun run release -- --push
+bun run release:push
 ```
 
 `bun run release`는 `package.json`의 major·minor 버전과 기존 태그를 기준으로 패치 버전을 자동 증가시킵니다. 예를 들어 기존 태그가 `v0.1.2`이면 다음 릴리스는 `v0.1.3`입니다. 작업 트리가 깨끗할 때만 릴리스를 만들며, `release` 브랜치에는 번들된 서버 파일과 `web/` 정적 자산만 커밋합니다.
