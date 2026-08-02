@@ -3711,13 +3711,28 @@ function decodeValue(raw) {
   }
   return value;
 }
-function managedValues(content) {
-  const values = new Map;
+function parsedValues(content) {
+  const values = {};
   for (const line of envLines(content)) {
     const key = keyFromLine(line);
+    if (!key)
+      continue;
+    values[key] = decodeValue(line.slice(line.indexOf("=") + 1));
+  }
+  return values;
+}
+function readEnvironmentFile(filePath) {
+  if (!existsSync(filePath))
+    return {};
+  return parsedValues(readFileSync(filePath, "utf8"));
+}
+function managedValues(content) {
+  const values = new Map;
+  for (const [rawKey, value] of Object.entries(parsedValues(content))) {
+    const key = rawKey;
     if (!key || !DEFINITION_BY_KEY.has(key))
       continue;
-    values.set(key, decodeValue(line.slice(line.indexOf("=") + 1)));
+    values.set(key, value);
   }
   return values;
 }
@@ -21150,19 +21165,22 @@ var defaultEnvironment = {
   WORKFLOW_MANAGER_ACCESS_MODE: "private",
   WORKFLOW_MANAGER_DATA_DIR: defaultDataDirectory
 };
-var port = Number(Bun.env.PORT ?? 3000);
-var hostname = Bun.env.HOST ?? "0.0.0.0";
-var accessMode = parseAccessMode(Bun.env.WORKFLOW_MANAGER_ACCESS_MODE);
-var dataDirectory = resolve2(Bun.env.WORKFLOW_MANAGER_DATA_DIR ?? defaultEnvironment.WORKFLOW_MANAGER_DATA_DIR);
-var publicDirectory = resolve2(Bun.env.WORKFLOW_MANAGER_PUBLIC_DIR ?? join2(import.meta.dir, "web"));
-var databasePath = resolve2(Bun.env.WORKFLOW_MANAGER_DB ?? join2(dataDirectory, "workflow-manager.sqlite"));
+var environmentFilePath = resolve2(Bun.env.WORKFLOW_MANAGER_CONFIG_FILE ?? join2(process.cwd(), ".env"));
+var configuredEnvironment = readEnvironmentFile(environmentFilePath);
+var environmentValue = (key) => configuredEnvironment[key] ?? Bun.env[key];
+var port = Number(environmentValue("PORT") ?? 3000);
+var hostname = environmentValue("HOST") ?? "0.0.0.0";
+var accessMode = parseAccessMode(environmentValue("WORKFLOW_MANAGER_ACCESS_MODE"));
+var dataDirectory = resolve2(environmentValue("WORKFLOW_MANAGER_DATA_DIR") ?? defaultEnvironment.WORKFLOW_MANAGER_DATA_DIR);
+var publicDirectory = resolve2(environmentValue("WORKFLOW_MANAGER_PUBLIC_DIR") ?? join2(import.meta.dir, "web"));
+var databasePath = resolve2(environmentValue("WORKFLOW_MANAGER_DB") ?? join2(dataDirectory, "workflow-manager.sqlite"));
 var environmentSettings = new EnvironmentSettings({
-  filePath: join2(process.cwd(), ".env"),
+  filePath: environmentFilePath,
   currentValues: {
-    WORKFLOW_MANAGER_NAME: Bun.env.WORKFLOW_MANAGER_NAME ?? defaultEnvironment.WORKFLOW_MANAGER_NAME,
-    WORKFLOW_MANAGER_TAGLINE: Bun.env.WORKFLOW_MANAGER_TAGLINE ?? defaultEnvironment.WORKFLOW_MANAGER_TAGLINE,
-    WORKFLOW_MANAGER_TITLE: Bun.env.WORKFLOW_MANAGER_TITLE ?? defaultEnvironment.WORKFLOW_MANAGER_TITLE,
-    WORKFLOW_MANAGER_DESCRIPTION: Bun.env.WORKFLOW_MANAGER_DESCRIPTION ?? defaultEnvironment.WORKFLOW_MANAGER_DESCRIPTION,
+    WORKFLOW_MANAGER_NAME: environmentValue("WORKFLOW_MANAGER_NAME") ?? defaultEnvironment.WORKFLOW_MANAGER_NAME,
+    WORKFLOW_MANAGER_TAGLINE: environmentValue("WORKFLOW_MANAGER_TAGLINE") ?? defaultEnvironment.WORKFLOW_MANAGER_TAGLINE,
+    WORKFLOW_MANAGER_TITLE: environmentValue("WORKFLOW_MANAGER_TITLE") ?? defaultEnvironment.WORKFLOW_MANAGER_TITLE,
+    WORKFLOW_MANAGER_DESCRIPTION: environmentValue("WORKFLOW_MANAGER_DESCRIPTION") ?? defaultEnvironment.WORKFLOW_MANAGER_DESCRIPTION,
     WORKFLOW_MANAGER_ACCESS_MODE: accessMode,
     WORKFLOW_MANAGER_DATA_DIR: dataDirectory
   },
@@ -21171,11 +21189,11 @@ var environmentSettings = new EnvironmentSettings({
 var db = new AppDatabase(databasePath);
 var interruptedCount = db.recoverInterruptedRuns();
 var runner = new WorkflowRunner(db);
-var configuredPasskeyOrigin = Bun.env.WORKFLOW_MANAGER_ORIGIN;
+var configuredPasskeyOrigin = environmentValue("WORKFLOW_MANAGER_ORIGIN");
 var passkeyOrigin = configuredPasskeyOrigin ?? `http://localhost:${port}`;
 var passkeyAuth = new PasskeyAuth(db, {
-  rpID: Bun.env.WORKFLOW_MANAGER_RP_ID ?? "localhost",
-  rpName: Bun.env.WORKFLOW_MANAGER_RP_NAME ?? environmentSettings.applicationSettings().name,
+  rpID: environmentValue("WORKFLOW_MANAGER_RP_ID") ?? "localhost",
+  rpName: environmentValue("WORKFLOW_MANAGER_RP_NAME") ?? environmentSettings.applicationSettings().name,
   expectedOrigin: passkeyOrigin
 });
 var app = createApp({
