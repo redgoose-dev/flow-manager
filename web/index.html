@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      id="app-description-meta"
+      name="description"
+      content="한 서버에서 셸 기반 워크플로우를 구성하고 실행하는 셀프 호스팅 매니저"
+    />
+    <meta id="application-name-meta" name="application-name" content="FlowManager" />
+    <meta
+      id="apple-app-title-meta"
+      name="apple-mobile-web-app-title"
+      content="FlowManager"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#249d8f" />
+    <title>FlowManager · Workflow Manager</title>
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link id="app-manifest-link" rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" id="brand-link" href="#/projects" aria-label="FlowManager 프로젝트 목록">
+        <img class="brand-mark" src="/favicon-32.png" alt="" width="25" height="25" />
+        <span id="brand-name">FlowManager</span>
+      </a>
+      <span class="topbar-note" id="topbar-note">Self-hosted workflow manager</span>
+      <a class="settings-link" id="settings-link" href="#/settings" hidden>환경설정</a>
+      <button class="topbar-action" id="logout-button" type="button" hidden>로그아웃</button>
+    </header>
+    <main id="app" tabindex="-1">
+      <div class="loading-view">
+        <span class="spinner" aria-hidden="true"></span>
+        <p>워크스페이스를 불러오는 중입니다.</p>
+      </div>
+    </main>
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
+  </body>
+</html>
