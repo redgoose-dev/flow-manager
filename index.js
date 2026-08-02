@@ -2058,7 +2058,7 @@ var require_tslib2 = __commonJS((exports, module) => {
 });
 
 // src/index.ts
-import { join as join2, resolve as resolve2 } from "path";
+import { join as join3, resolve as resolve2 } from "path";
 
 // src/db/database.ts
 import { Database } from "bun:sqlite";
@@ -3274,7 +3274,30 @@ $ ${step.command}
 }
 
 // src/server/app.ts
+import { join as join2 } from "path";
+
+// src/server/release-info.ts
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+function readVersion(filePath) {
+  if (!existsSync(filePath))
+    return null;
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8"));
+    return typeof parsed.version === "string" ? parsed.version : null;
+  } catch {
+    return null;
+  }
+}
+function displayVersion(value) {
+  return value.startsWith("v") ? value : "v" + value;
+}
+function applicationVersion() {
+  const version = readVersion(join(import.meta.dir, "release.json")) ?? readVersion(join(import.meta.dir, "..", "..", "package.json")) ?? readVersion(join(process.cwd(), "package.json"));
+  return version ? displayVersion(version) : "dev";
+}
+
+// src/server/app.ts
 var JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 function json(data, status = 200, headers = {}) {
   return Response.json(data, {
@@ -3336,7 +3359,8 @@ function securityHeaders(response) {
 }
 function createApp(options) {
   const { db, runner, environmentSettings, auth } = options;
-  const publicDirectory = options.publicDirectory ?? join(import.meta.dir, "..", "web");
+  const publicDirectory = options.publicDirectory ?? join2(import.meta.dir, "..", "web");
+  const version = applicationVersion();
   return async function fetch(request) {
     try {
       const url = new URL(request.url);
@@ -3379,7 +3403,8 @@ function createApp(options) {
       if (pathname === "/api/auth/status" && method === "GET") {
         return authJson({
           ...auth.status(request),
-          settings: environmentSettings.applicationSettings()
+          settings: environmentSettings.applicationSettings(),
+          version
         });
       }
       if (pathname === "/api/auth/setup/options" && method === "POST") {
@@ -3432,12 +3457,16 @@ function createApp(options) {
       if (pathname === "/api/settings" && method === "GET") {
         return json({
           settings: environmentSettings.applicationSettings(),
-          environment: environmentSettings.list()
+          environment: environmentSettings.list(),
+          version
         });
       }
       if (pathname === "/api/settings" && method === "PATCH") {
         const input = await body(request);
-        return json(environmentSettings.update(objectBody(input.values)));
+        return json({
+          ...environmentSettings.update(objectBody(input.values)),
+          version
+        });
       }
       if (pathname === "/api/projects" && method === "GET") {
         return json({ projects: db.listProjects() });
@@ -3618,7 +3647,7 @@ function createApp(options) {
       const fileName = staticFiles[pathname];
       if (!fileName)
         return new Response("Not found", { status: 404 });
-      const file = Bun.file(join(publicDirectory, fileName));
+      const file = Bun.file(join2(publicDirectory, fileName));
       if (!await file.exists())
         return new Response("Not found", { status: 404 });
       return securityHeaders(new Response(file));
@@ -3634,9 +3663,9 @@ function createApp(options) {
 
 // src/server/environment-settings.ts
 import {
-  existsSync,
+  existsSync as existsSync2,
   mkdirSync as mkdirSync2,
-  readFileSync,
+  readFileSync as readFileSync2,
   renameSync,
   writeFileSync
 } from "fs";
@@ -3729,9 +3758,9 @@ function parsedValues(content) {
   return values;
 }
 function readEnvironmentFile(filePath) {
-  if (!existsSync(filePath))
+  if (!existsSync2(filePath))
     return {};
-  return parsedValues(readFileSync(filePath, "utf8"));
+  return parsedValues(readFileSync2(filePath, "utf8"));
 }
 function managedValues(content) {
   const values = new Map;
@@ -3796,7 +3825,7 @@ class EnvironmentSettings {
     this.currentValues = { ...options.currentValues };
   }
   readFile() {
-    return existsSync(this.options.filePath) ? readFileSync(this.options.filePath, "utf8") : "";
+    return existsSync2(this.options.filePath) ? readFileSync2(this.options.filePath, "utf8") : "";
   }
   applicationSettings() {
     return {
@@ -21163,7 +21192,7 @@ class PasskeyAuth {
 }
 
 // src/index.ts
-var defaultDataDirectory = join2(process.cwd(), "data");
+var defaultDataDirectory = join3(process.cwd(), "data");
 var defaultEnvironment = {
   WORKFLOW_MANAGER_NAME: "FlowManager",
   WORKFLOW_MANAGER_TAGLINE: "Self-hosted workflow manager",
@@ -21172,15 +21201,15 @@ var defaultEnvironment = {
   WORKFLOW_MANAGER_ACCESS_MODE: "private",
   WORKFLOW_MANAGER_DATA_DIR: defaultDataDirectory
 };
-var environmentFilePath = resolve2(Bun.env.WORKFLOW_MANAGER_CONFIG_FILE ?? join2(process.cwd(), ".env"));
+var environmentFilePath = resolve2(Bun.env.WORKFLOW_MANAGER_CONFIG_FILE ?? join3(process.cwd(), ".env"));
 var configuredEnvironment = readEnvironmentFile(environmentFilePath);
 var environmentValue = (key) => configuredEnvironment[key] ?? Bun.env[key];
 var port = Number(environmentValue("PORT") ?? 3000);
 var hostname = environmentValue("HOST") ?? "0.0.0.0";
 var accessMode = parseAccessMode(environmentValue("WORKFLOW_MANAGER_ACCESS_MODE"));
 var dataDirectory = resolve2(environmentValue("WORKFLOW_MANAGER_DATA_DIR") ?? defaultEnvironment.WORKFLOW_MANAGER_DATA_DIR);
-var publicDirectory = resolve2(environmentValue("WORKFLOW_MANAGER_PUBLIC_DIR") ?? join2(import.meta.dir, "web"));
-var databasePath = resolve2(environmentValue("WORKFLOW_MANAGER_DB") ?? join2(dataDirectory, "workflow-manager.sqlite"));
+var publicDirectory = resolve2(environmentValue("WORKFLOW_MANAGER_PUBLIC_DIR") ?? join3(import.meta.dir, "web"));
+var databasePath = resolve2(environmentValue("WORKFLOW_MANAGER_DB") ?? join3(dataDirectory, "workflow-manager.sqlite"));
 var environmentSettings = new EnvironmentSettings({
   filePath: environmentFilePath,
   currentValues: {
