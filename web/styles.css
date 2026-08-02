@@ -246,7 +246,7 @@ button {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 8px 16px;
 }
 
 .context-nav a {
@@ -276,12 +276,40 @@ button {
 }
 
 .context-nav .context-back {
-  color: var(--color-text-primary);
+  border-color: var(--color-brand-border-hover);
+  background: var(--color-brand-subtle);
+  color: var(--color-brand-strong);
+  box-shadow: 0 2px 6px rgba(36, 157, 143, 0.12);
 }
 
 .context-nav .context-back span {
   color: var(--color-brand-strong);
   font-size: 1rem;
+}
+
+.context-nav .context-link {
+  min-height: 30px;
+  padding: 0 2px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+}
+
+.context-nav .context-link:hover {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-brand-strong);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.context-nav .context-link:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+  outline: 3px solid var(--color-brand-subtle);
+  outline-offset: 3px;
 }
 
 .summary {
@@ -485,6 +513,28 @@ button {
   align-self: center;
   color: var(--color-text-tertiary);
   font-size: 1.3rem;
+}
+
+.workflow-row-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.workflow-run-unavailable {
+  color: var(--color-text-tertiary);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.workflow-row-actions.is-unavailable,
+.workflow-row-actions.is-unavailable .workflow-run-unavailable,
+.workflow-row-actions.is-unavailable .arrow {
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .status {

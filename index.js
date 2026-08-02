@@ -2099,6 +2099,7 @@ function asWorkflow(row) {
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
     stepCount: row.step_count === undefined ? undefined : Number(row.step_count),
+    activeStepCount: row.active_step_count === undefined ? undefined : Number(row.active_step_count),
     recentRunStatus: row.recent_run_status ?? undefined
   };
 }
@@ -2496,6 +2497,8 @@ class AppDatabase {
   listWorkflows(projectId) {
     return this.sqlite.query(`SELECT w.*,
             (SELECT COUNT(*) FROM steps s WHERE s.workflow_id = w.id) AS step_count,
+            (SELECT COUNT(*) FROM steps s
+             WHERE s.workflow_id = w.id AND s.enabled = 1) AS active_step_count,
             (SELECT r.status FROM runs r
              WHERE r.workflow_id = w.id
              ORDER BY r.created_at DESC LIMIT 1) AS recent_run_status
@@ -2603,6 +2606,10 @@ class AppDatabase {
     const workflow = this.getWorkflow(workflowId);
     if (!workflow)
       throw new AppError("\uC6CC\uD06C\uD50C\uB85C\uC6B0\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.", 404, "not_found");
+    const activeSteps = workflow.steps.filter((step) => step.enabled);
+    if (!activeSteps.length) {
+      throw new AppError("\uD65C\uC131\uD654\uB41C \uB2E8\uACC4\uB97C \uD558\uB098 \uC774\uC0C1 \uCD94\uAC00\uD574 \uC8FC\uC138\uC694.", 409, "no_active_steps");
+    }
     const project = this.getProject(workflow.projectId);
     const runId = id();
     const createdAt = now();
@@ -2619,7 +2626,7 @@ class AppDatabase {
          (id, run_id, step_id, step_name, command, position,
           working_directory, timeout_seconds, input_prompt, input_sensitive, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued')`);
-      for (const step of workflow.steps.filter((item) => item.enabled)) {
+      for (const step of activeSteps) {
         insertStepRun.run(id(), runId, step.id, step.name, step.command, step.position, step.workingDirectory, step.timeoutSeconds, step.inputPrompt, step.inputSensitive ? 1 : 0);
       }
     });
@@ -3349,7 +3356,7 @@ function createApp(options) {
           scope: "/",
           display: "standalone",
           background_color: "#f4f3ee",
-          theme_color: "#249d8f",
+          theme_color: "#14776d",
           icons: [
             {
               src: "/icon-192.png",
