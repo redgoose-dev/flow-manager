@@ -108,6 +108,17 @@ WORKFLOW_MANAGER_ORIGIN="https://flow.internal.example.com"
 
 `WORKFLOW_MANAGER_ORIGIN`은 경로 없이 실제 브라우저 주소와 정확히 같아야 합니다. `WORKFLOW_MANAGER_RP_ID`는 origin의 호스트와 같거나 그 상위 도메인이어야 합니다. HTTP는 `localhost`에서만 허용되고, HTTPS origin에서는 세션 쿠키에도 `Secure` 속성이 자동으로 붙습니다.
 
+리버스 프록시를 통해 공개 도메인으로 서비스할 때는 애플리케이션이 실행되는 서버의 `.env`에 공개 주소를 명시해야 합니다. 예를 들어 `https://flow.example.com`으로 접속한다면 다음처럼 설정합니다.
+
+```dotenv
+HOST="127.0.0.1"
+WORKFLOW_MANAGER_ACCESS_MODE="local"
+WORKFLOW_MANAGER_RP_ID="flow.example.com"
+WORKFLOW_MANAGER_ORIGIN="https://flow.example.com"
+```
+
+이 설정이 로드되면 서버 시작 시 최초 패스키 설정 주소도 `https://flow.example.com/#/setup?token=...` 형태로 출력됩니다. macOS `launchd`로 실행할 때는 `WorkingDirectory`를 `.env`가 있는 디렉터리로 지정하거나, 같은 값을 서비스 환경 변수로 전달해야 합니다. `WORKFLOW_MANAGER_ORIGIN`이 없으면 안전한 기본값인 `localhost`가 사용되고 시작 로그에 경고가 표시됩니다.
+
 Relying Party ID가 바뀌면 기존 패스키는 새 주소에서 사용할 수 없습니다. 로컬 테스트에서 운영 도메인으로 옮길 때 운영 환경에서 패스키를 다시 등록해야 합니다. 관리자 설정 이후 환경설정 화면에서 패스키를 추가하거나 삭제할 수 있으며, 잠금을 방지하기 위해 마지막 패스키는 삭제할 수 없습니다.
 
 패스키가 있더라도 신뢰할 수 없는 네트워크에 서버 포트를 직접 노출하지 마세요. 워크플로우는 애플리케이션 프로세스와 같은 OS 권한으로 명령을 실행합니다. 공유기·OS 방화벽과 HTTPS 리버스 프록시에서도 접근을 내부 네트워크로 제한하는 것을 권장합니다.

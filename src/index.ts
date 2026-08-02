@@ -59,8 +59,9 @@ const environmentSettings = new EnvironmentSettings({
 const db = new AppDatabase(databasePath);
 const interruptedCount = db.recoverInterruptedRuns();
 const runner = new WorkflowRunner(db);
+const configuredPasskeyOrigin = Bun.env.WORKFLOW_MANAGER_ORIGIN;
 const passkeyOrigin =
-  Bun.env.WORKFLOW_MANAGER_ORIGIN ?? `http://localhost:${port}`;
+  configuredPasskeyOrigin ?? `http://localhost:${port}`;
 const passkeyAuth = new PasskeyAuth(db, {
   rpID: Bun.env.WORKFLOW_MANAGER_RP_ID ?? "localhost",
   rpName:
@@ -111,6 +112,11 @@ for (const url of privateNetworkUrls(server.port)) {
 console.log(`Access mode: ${accessMode}`);
 console.log(`Data: ${databasePath}`);
 console.log(`Passkey origin: ${passkeyAuth.config.expectedOrigin}`);
+if (!configuredPasskeyOrigin) {
+  console.warn(
+    "WORKFLOW_MANAGER_ORIGIN이 설정되지 않아 패스키 안내 주소가 localhost로 설정되었습니다.",
+  );
+}
 if (passkeyAuth.setupToken) {
   const setupUrl = new URL(passkeyAuth.config.expectedOrigin);
   setupUrl.hash = `/setup?token=${passkeyAuth.setupToken}`;
