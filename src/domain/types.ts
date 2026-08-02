@@ -35,6 +35,7 @@ export interface Workflow {
   createdAt: string;
   updatedAt: string;
   stepCount?: number;
+  activeStepCount?: number;
   recentRunStatus?: RunStatus | null;
 }
 

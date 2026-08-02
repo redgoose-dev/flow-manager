@@ -225,6 +225,7 @@ describe("HTTP API", () => {
     expect(manifest.short_name).toBe("내부 자동화");
     expect(manifest.description).toContain("운영 작업을 한곳에서");
     expect(manifest.description).toContain("팀 워크플로우 설명");
+    expect(manifest.theme_color).toBe("#14776d");
   });
 
   test("실행 시작 API가 완료된 실행과 영속 로그를 남긴다", async () => {
@@ -329,6 +330,7 @@ describe("HTTP API", () => {
     expect(clientJavaScript).toContain("waiting_input");
     expect(clientJavaScript).toContain("inputSensitive");
     expect(clientJavaScript).toContain("/input");
+    expect(clientJavaScript).toContain('data-action="run-workflow"');
     expect(clientJavaScript).toContain("/manifest.webmanifest?revision=");
     expect(clientJavaScript).not.toContain(">단계 저장</button>");
     expect(favicon.status).toBe(200);

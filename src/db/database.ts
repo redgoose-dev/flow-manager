@@ -43,6 +43,10 @@ function asWorkflow(row: AnyRow): Workflow {
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
     stepCount: row.step_count === undefined ? undefined : Number(row.step_count),
+    activeStepCount:
+      row.active_step_count === undefined
+        ? undefined
+        : Number(row.active_step_count),
     recentRunStatus: (row.recent_run_status as RunStatus | null) ?? undefined,
   };
 }
@@ -631,6 +635,8 @@ export class AppDatabase {
         .query(
           `SELECT w.*,
             (SELECT COUNT(*) FROM steps s WHERE s.workflow_id = w.id) AS step_count,
+            (SELECT COUNT(*) FROM steps s
+             WHERE s.workflow_id = w.id AND s.enabled = 1) AS active_step_count,
             (SELECT r.status FROM runs r
              WHERE r.workflow_id = w.id
              ORDER BY r.created_at DESC LIMIT 1) AS recent_run_status
@@ -849,6 +855,14 @@ export class AppDatabase {
   createRun(workflowId: string): RunDetail {
     const workflow = this.getWorkflow(workflowId);
     if (!workflow) throw new AppError("워크플로우를 찾을 수 없습니다.", 404, "not_found");
+    const activeSteps = workflow.steps.filter((step) => step.enabled);
+    if (!activeSteps.length) {
+      throw new AppError(
+        "활성화된 단계를 하나 이상 추가해 주세요.",
+        409,
+        "no_active_steps",
+      );
+    }
     const project = this.getProject(workflow.projectId)!;
     const runId = id();
     const createdAt = now();
@@ -880,7 +894,7 @@ export class AppDatabase {
           working_directory, timeout_seconds, input_prompt, input_sensitive, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued')`,
       );
-      for (const step of workflow.steps.filter((item) => item.enabled)) {
+      for (const step of activeSteps) {
         insertStepRun.run(
           id(),
           runId,

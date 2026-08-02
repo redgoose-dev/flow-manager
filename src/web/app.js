@@ -736,7 +736,7 @@ async function renderSettings() {
     <section class="page-heading compact">
       <div>
         <nav class="context-nav" aria-label="환경설정 화면 이동">
-          <a class="context-back" href="#/projects"><span aria-hidden="true">←</span> 전체 프로젝트</a>
+          <a class="context-back" href="#/projects"><span aria-hidden="true">←</span> 프로젝트 목록</a>
         </nav>
         <h1>환경설정</h1>
         <p>화면 정보와 서버 시작 환경을 허용된 변수 범위 안에서 관리합니다.</p>
@@ -903,11 +903,12 @@ function runRows(runs) {
 
 async function renderProject(projectId) {
   const { project, workflows, runs } = await api(`/api/projects/${projectId}`);
+  const projectBusy = runs.some((run) => activeRunStatuses.includes(run.status));
   app.innerHTML = `
     <section class="page-heading compact">
       <div>
         <nav class="context-nav" aria-label="프로젝트 이동">
-          <a class="context-back" href="#/projects"><span aria-hidden="true">←</span> 전체 프로젝트</a>
+          <a class="context-back" href="#/projects"><span aria-hidden="true">←</span> 프로젝트 목록</a>
         </nav>
         <h1>${escapeHtml(project.name)}</h1>
         <p>${escapeHtml(project.description || "이 프로젝트의 워크플로우와 실행 이력을 관리합니다.")}</p>
@@ -933,11 +934,21 @@ async function renderProject(projectId) {
                   <p class="row-description">${escapeHtml(workflow.description || "설명이 없습니다.")}</p>
                   <div class="row-meta">
                     ${status(workflow.recentRunStatus)}
-                    <span>${workflow.stepCount}개 단계</span>
+                    <span>${workflow.activeStepCount ?? 0}개 활성 단계 · ${workflow.stepCount ?? 0}개 단계</span>
                     <span>${formatDate(workflow.updatedAt)} 수정</span>
                   </div>
                 </div>
-                <span class="arrow" aria-hidden="true">→</span>
+                <div class="workflow-row-actions${(workflow.activeStepCount ?? 0) > 0 ? "" : " is-unavailable"}">
+                  ${(workflow.activeStepCount ?? 0) > 0
+                    ? '<button class="button small accent" type="button" data-action="run-workflow" data-workflow-id="' +
+                      escapeHtml(workflow.id) +
+                      '" ' +
+                      (projectBusy
+                        ? 'disabled title="이 프로젝트에서 다른 워크플로우가 실행 중입니다."'
+                        : 'aria-label="' + escapeHtml(workflow.name) + ' 실행"') +
+                      '>▶ 실행</button>'
+                    : '<span class="workflow-run-unavailable">활성 단계 없음</span><span class="arrow" aria-hidden="true">→</span>'}
+                </div>
               </article>`,
                   )
                   .join("")
@@ -982,6 +993,23 @@ async function renderProject(projectId) {
     row.addEventListener("click", navigate);
     row.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") navigate();
+    });
+  });
+
+  document.querySelectorAll('[data-action="run-workflow"]').forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setBusy(button, true, "시작 중…");
+      try {
+        const { run } = await api(`/api/workflows/${button.dataset.workflowId}/runs`, {
+          method: "POST",
+        });
+        location.hash = `#/runs/${run.id}`;
+      } catch (error) {
+        toast(error.message, "error");
+        setBusy(button, false);
+      }
     });
   });
 
@@ -1077,19 +1105,20 @@ async function renderWorkflow(workflowId) {
   await disposeStepAutosaves();
   const { workflow } = await api(`/api/workflows/${workflowId}`);
   const { project } = await api(`/api/projects/${workflow.projectId}`);
+  const hasActiveSteps = workflow.steps.some((step) => step.enabled);
   app.innerHTML = `
     <section class="page-heading compact">
       <div>
         <nav class="context-nav" aria-label="워크플로우 이동">
-          <a class="context-back" href="#/projects/${project.id}"><span aria-hidden="true">←</span> ${escapeHtml(project.name)}</a>
-          <a class="context-link" href="#/projects">전체 프로젝트</a>
+          <a class="context-back" href="#/projects/${project.id}"><span aria-hidden="true">←</span> 프로젝트: ${escapeHtml(project.name)}</a>
+          <a class="context-link" href="#/projects">프로젝트 목록</a>
         </nav>
         <h1>${escapeHtml(workflow.name)}</h1>
         <p>${escapeHtml(workflow.description || "단계를 구성하고 실행할 수 있습니다.")}</p>
       </div>
       <div class="run-actions">
         <span id="active-step-count">${workflow.steps.filter((step) => step.enabled).length}개 활성 단계</span>
-        <button class="button accent" id="run-workflow">▶ 실행</button>
+        <button class="button accent" id="run-workflow" ${hasActiveSteps ? "" : 'disabled title="활성화된 단계를 하나 이상 추가해 주세요."'}>▶ 실행</button>
       </div>
     </section>
     <div class="split-layout">
@@ -1395,9 +1424,9 @@ async function renderRun(runId) {
     <section class="page-heading compact">
       <div>
         <nav class="context-nav" aria-label="실행 화면 이동">
-          <a class="context-back" href="#/projects/${run.projectId}"><span aria-hidden="true">←</span> ${escapeHtml(run.projectName)}</a>
+          <a class="context-back" href="#/projects/${run.projectId}"><span aria-hidden="true">←</span> 프로젝트: ${escapeHtml(run.projectName)}</a>
           ${run.workflowId ? `<a class="context-link" href="#/workflows/${run.workflowId}">워크플로우 편집</a>` : ""}
-          <a class="context-link" href="#/projects">전체 프로젝트</a>
+          <a class="context-link" href="#/projects">프로젝트 목록</a>
         </nav>
         <h1>${escapeHtml(run.workflowName)}</h1>
         <p>실행 단계와 표준 출력·오류 로그를 시간순으로 확인합니다.</p>

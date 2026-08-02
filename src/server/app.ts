@@ -123,7 +123,7 @@ export function createApp(options: {
               scope: "/",
               display: "standalone",
               background_color: "#f4f3ee",
-              theme_color: "#249d8f",
+              theme_color: "#14776d",
               icons: [
                 {
                   src: "/icon-192.png",

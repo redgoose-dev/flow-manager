@@ -121,6 +121,22 @@ describe("WorkflowRunner", () => {
     await waitForFinished(db, started.id);
   });
 
+  test("활성 단계 없는 워크플로우 실행을 차단한다", () => {
+    const item = workflow();
+    const step = db.createStep(item.id, { name: "비활성", command: "echo never" });
+    db.updateStep(step.id, { enabled: false });
+
+    let error: unknown;
+    try {
+      runner.start(item.id);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("no_active_steps");
+  });
+
   test("실행 중인 명령을 취소하고 이후 단계를 취소 상태로 남긴다", async () => {
     const item = workflow();
     db.createStep(item.id, { name: "긴 작업", command: "sleep 5" });

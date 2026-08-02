@@ -41,6 +41,7 @@ describe("AppDatabase CRUD", () => {
 
     expect(result.steps.map((step) => step.name)).toEqual(["둘째 단계", "첫 단계"]);
     expect(db.listWorkflows(project.id)[0].stepCount).toBe(2);
+    expect(db.listWorkflows(project.id)[0].activeStepCount).toBe(2);
   });
 
   test("기존 데이터베이스에 입력 단계 컬럼을 추가한다", () => {
