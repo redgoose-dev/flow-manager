@@ -21171,7 +21171,8 @@ var environmentSettings = new EnvironmentSettings({
 var db = new AppDatabase(databasePath);
 var interruptedCount = db.recoverInterruptedRuns();
 var runner = new WorkflowRunner(db);
-var passkeyOrigin = Bun.env.WORKFLOW_MANAGER_ORIGIN ?? `http://localhost:${port}`;
+var configuredPasskeyOrigin = Bun.env.WORKFLOW_MANAGER_ORIGIN;
+var passkeyOrigin = configuredPasskeyOrigin ?? `http://localhost:${port}`;
 var passkeyAuth = new PasskeyAuth(db, {
   rpID: Bun.env.WORKFLOW_MANAGER_RP_ID ?? "localhost",
   rpName: Bun.env.WORKFLOW_MANAGER_RP_NAME ?? environmentSettings.applicationSettings().name,
@@ -21212,6 +21213,9 @@ for (const url of privateNetworkUrls(server.port)) {
 console.log(`Access mode: ${accessMode}`);
 console.log(`Data: ${databasePath}`);
 console.log(`Passkey origin: ${passkeyAuth.config.expectedOrigin}`);
+if (!configuredPasskeyOrigin) {
+  console.warn("WORKFLOW_MANAGER_ORIGIN\uC774 \uC124\uC815\uB418\uC9C0 \uC54A\uC544 \uD328\uC2A4\uD0A4 \uC548\uB0B4 \uC8FC\uC18C\uAC00 localhost\uB85C \uC124\uC815\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
+}
 if (passkeyAuth.setupToken) {
   const setupUrl = new URL(passkeyAuth.config.expectedOrigin);
   setupUrl.hash = `/setup?token=${passkeyAuth.setupToken}`;
