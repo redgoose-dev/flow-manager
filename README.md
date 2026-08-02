@@ -42,6 +42,25 @@ First-time passkey setup (valid for 15 minutes):
 bun run dev
 ```
 
+## 빌드와 릴리스
+
+운영 서버에는 개발 소스 대신 빌드 산출물이 들어 있는 `release` 브랜치만 배포할 수 있습니다.
+
+```bash
+# 현재 소스로 dist/ 산출물만 생성
+bun run build
+
+# 테스트, 빌드, release 브랜치 커밋과 자동 태그 생성
+bun run release
+
+# 릴리스 커밋과 태그를 origin에 함께 전송
+bun run release -- --push
+```
+
+`bun run release`는 `package.json`의 major·minor 버전과 기존 태그를 기준으로 패치 버전을 자동 증가시킵니다. 예를 들어 기존 태그가 `v0.1.2`이면 다음 릴리스는 `v0.1.3`입니다. 작업 트리가 깨끗할 때만 릴리스를 만들며, `release` 브랜치에는 번들된 서버 파일과 `web/` 정적 자산만 커밋합니다.
+
+`.env`, `data/`, SQLite 데이터베이스와 로그는 릴리스 브랜치에 포함하지 않습니다. 운영 서버는 `release` 브랜치를 받은 뒤 Bun으로 `index.js`를 실행하고, 운영 데이터는 별도 디렉터리에 보관해야 합니다.
+
 기본 설정은 환경 변수로 바꿀 수 있습니다.
 
 | 환경 변수 | 기본값 | 설명 |
@@ -55,6 +74,7 @@ bun run dev
 | `WORKFLOW_MANAGER_ACCESS_MODE` | `private` | `private`: 사설망·루프백 허용, `local`: 루프백만 허용 |
 | `WORKFLOW_MANAGER_DATA_DIR` | `<현재 디렉터리>/data` | 데이터 디렉터리 |
 | `WORKFLOW_MANAGER_DB` | `<데이터 디렉터리>/workflow-manager.sqlite` | SQLite 파일 경로 |
+| `WORKFLOW_MANAGER_PUBLIC_DIR` | `<실행 파일 디렉터리>/web` | 빌드된 정적 웹 자산 디렉터리 |
 | `WORKFLOW_MANAGER_RP_ID` | `localhost` | 패스키 Relying Party ID. 서비스 도메인 또는 그 상위 도메인 |
 | `WORKFLOW_MANAGER_RP_NAME` | 서비스 이름 | 패스키 등록 화면에 표시할 서비스 이름 |
 | `WORKFLOW_MANAGER_ORIGIN` | `http://localhost:<PORT>` | 패스키를 등록·사용할 정확한 origin |

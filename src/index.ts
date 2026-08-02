@@ -31,6 +31,9 @@ const dataDirectory = resolve(
   Bun.env.WORKFLOW_MANAGER_DATA_DIR ??
     defaultEnvironment.WORKFLOW_MANAGER_DATA_DIR,
 );
+const publicDirectory = resolve(
+  Bun.env.WORKFLOW_MANAGER_PUBLIC_DIR ?? join(import.meta.dir, "web"),
+);
 const databasePath = resolve(
   Bun.env.WORKFLOW_MANAGER_DB ?? join(dataDirectory, "workflow-manager.sqlite"),
 );
@@ -70,6 +73,7 @@ const app = createApp({
   runner,
   environmentSettings,
   auth: passkeyAuth,
+  publicDirectory,
 });
 
 const server = Bun.serve({
