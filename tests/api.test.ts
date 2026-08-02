@@ -316,9 +316,12 @@ describe("HTTP API", () => {
 
     expect(health.status).toBe(200);
     expect((await payload(health)).ok).toBe(true);
+    const authStatus = await request("/api/auth/status");
+    expect((await payload(authStatus)).version).toMatch(/^v\d+\.\d+\.\d+$/);
     expect(index.status).toBe(200);
     const indexHtml = await index.text();
     expect(indexHtml).toContain("FlowManager");
+    expect(indexHtml).toContain('id="topbar-version"');
     expect(indexHtml).toContain('rel="manifest"');
     expect(indexHtml).toContain('rel="apple-touch-icon"');
     expect(clientScript.status).toBe(200);

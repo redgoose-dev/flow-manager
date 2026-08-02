@@ -86,6 +86,51 @@ body {
   background: var(--color-background-canvas);
 }
 
+#app,
+.topbar,
+.toast-region {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"],
+.log-output,
+.path-text,
+.run-id,
+code,
+pre {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#brand-name,
+.topbar-note,
+#app h1,
+#app h2,
+#app h3,
+#app p,
+#app li,
+#app td,
+#app th,
+#app .empty-inline,
+#app .row-meta,
+#app .status,
+#app .autosave-status,
+#app .run-step-name,
+#app .run-step-meta,
+#app .panel-summary-copy {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
 button,
 input,
 textarea,
@@ -143,9 +188,25 @@ button {
   text-transform: uppercase;
 }
 
+.topbar-version {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid var(--color-brand-border-hover);
+  border-radius: 999px;
+  background: var(--color-brand-subtle);
+  color: var(--color-brand-strong);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
 .settings-link,
 .topbar-action {
-  margin-left: auto;
+  margin-left: 12px;
   padding: 5px 8px;
   border: 0;
   background: transparent;
@@ -795,6 +856,12 @@ textarea::placeholder {
 
 .settings-shell {
   gap: 28px;
+  margin-inline: auto;
+}
+
+.settings-heading {
+  width: min(100%, 920px);
+  margin-inline: auto;
 }
 
 .settings-section .section-header {
@@ -1537,7 +1604,7 @@ tbody tr:hover {
   }
 
   .settings-link {
-    margin-left: auto;
+    margin-left: 12px;
   }
 
   #app {

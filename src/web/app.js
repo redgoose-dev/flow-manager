@@ -3,6 +3,7 @@ const toastRegion = document.querySelector("#toast-region");
 const brandName = document.querySelector("#brand-name");
 const brandLink = document.querySelector("#brand-link");
 const topbarNote = document.querySelector("#topbar-note");
+const topbarVersion = document.querySelector("#topbar-version");
 const descriptionMeta = document.querySelector("#app-description-meta");
 const applicationNameMeta = document.querySelector("#application-name-meta");
 const appleAppTitleMeta = document.querySelector("#apple-app-title-meta");
@@ -43,6 +44,7 @@ let applicationSettings = {
   description:
     "프로젝트별 셸 워크플로우를 구성하고 실행 상태와 로그를 한곳에서 추적하세요.",
 };
+let applicationVersion = "dev";
 
 function escapeHtml(value = "") {
   return String(value)
@@ -157,14 +159,19 @@ function setBusy(button, busy, label = "처리 중…") {
   }
 }
 
-function applyApplicationSettings(settings) {
+function applyApplicationSettings(settings, version) {
   applicationSettings = settings;
+  if (version) applicationVersion = version;
   brandName.textContent = settings.name;
   brandLink.setAttribute("aria-label", `${settings.name} 프로젝트 목록`);
   topbarNote.textContent = settings.tagline;
   descriptionMeta.setAttribute("content", settings.description);
   applicationNameMeta.setAttribute("content", settings.name);
   appleAppTitleMeta.setAttribute("content", settings.name);
+  if (topbarVersion) {
+    topbarVersion.textContent = applicationVersion;
+    topbarVersion.hidden = false;
+  }
   manifestLink.setAttribute(
     "href",
     `/manifest.webmanifest?revision=${Date.now()}`,
@@ -180,7 +187,7 @@ async function loadAuthStatus() {
     user: result.user,
     csrfToken: result.csrfToken,
   };
-  applyApplicationSettings(result.settings);
+  applyApplicationSettings(result.settings, result.version);
   settingsLoaded = true;
   authChecked = true;
   updateAuthChrome();
@@ -189,7 +196,7 @@ async function loadAuthStatus() {
 
 async function loadApplicationSettings() {
   const result = await api("/api/settings");
-  applyApplicationSettings(result.settings);
+  applyApplicationSettings(result.settings, result.version);
   settingsLoaded = true;
   return result;
 }
@@ -733,7 +740,7 @@ async function renderSettings() {
   );
 
   app.innerHTML = `
-    <section class="page-heading compact">
+    <section class="page-heading compact settings-heading">
       <div>
         <nav class="context-nav" aria-label="환경설정 화면 이동">
           <a class="context-back" href="#/projects"><span aria-hidden="true">←</span> 프로젝트 목록</a>

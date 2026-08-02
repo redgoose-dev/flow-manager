@@ -14,6 +14,7 @@ import {
   rootDirectory,
   workingDirectory,
 } from "./validation";
+import { applicationVersion } from "./release-info";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -97,6 +98,7 @@ export function createApp(options: {
   const { db, runner, environmentSettings, auth } = options;
   const publicDirectory =
     options.publicDirectory ?? join(import.meta.dir, "..", "web");
+  const version = applicationVersion();
 
   return async function fetch(request: Request): Promise<Response> {
     try {
@@ -152,6 +154,7 @@ export function createApp(options: {
         return authJson({
           ...auth.status(request),
           settings: environmentSettings.applicationSettings(),
+          version,
         });
       }
       if (pathname === "/api/auth/setup/options" && method === "POST") {
@@ -233,11 +236,15 @@ export function createApp(options: {
         return json({
           settings: environmentSettings.applicationSettings(),
           environment: environmentSettings.list(),
+          version,
         });
       }
       if (pathname === "/api/settings" && method === "PATCH") {
         const input = await body(request);
-        return json(environmentSettings.update(objectBody(input.values)));
+        return json({
+          ...environmentSettings.update(objectBody(input.values)),
+          version,
+        });
       }
 
       if (pathname === "/api/projects" && method === "GET") {
