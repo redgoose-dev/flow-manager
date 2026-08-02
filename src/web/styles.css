@@ -345,6 +345,60 @@ button {
   padding: 24px;
 }
 
+.collapsible-panel {
+  padding: 0;
+}
+
+.panel-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 24px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.panel-summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel-summary:focus-visible {
+  outline: 3px solid var(--color-brand-subtle);
+  outline-offset: -3px;
+}
+
+.panel-summary-copy {
+  min-width: 0;
+}
+
+.panel-summary .panel-title {
+  display: block;
+}
+
+.panel-summary .panel-description {
+  display: block;
+  margin: 5px 0 0;
+}
+
+.panel-toggle {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border-right: 2px solid var(--color-brand-strong);
+  border-bottom: 2px solid var(--color-brand-strong);
+  transform: translateY(-3px) rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.collapsible-panel[open] .panel-toggle {
+  transform: translateY(3px) rotate(225deg);
+}
+
+.collapsible-panel > form {
+  padding: 0 24px 24px;
+}
+
 .panel.sticky {
   position: sticky;
   top: 68px;
@@ -566,6 +620,9 @@ textarea {
 
 textarea.command-input {
   min-height: 105px;
+  max-height: 320px;
+  overflow-y: auto;
+  field-sizing: content;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 0.8rem;
 }

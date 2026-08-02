@@ -946,16 +946,21 @@ async function renderProject(projectId) {
         </div>
       </section>
       <aside class="stack">
-        <section class="panel">
-          <h2 class="panel-title">프로젝트 설정</h2>
-          <p class="panel-description">이 프로젝트의 표시 정보와 기본 작업 경로입니다.</p>
+        <details class="panel collapsible-panel">
+          <summary class="panel-summary">
+            <span class="panel-summary-copy">
+              <span class="panel-title" role="heading" aria-level="2">프로젝트 설정</span>
+              <span class="panel-description">이 프로젝트의 표시 정보와 기본 작업 경로입니다.</span>
+            </span>
+            <span class="panel-toggle" aria-hidden="true"></span>
+          </summary>
           <form id="edit-project-form" class="form-grid">
             <div class="field"><label for="edit-project-name">이름</label><input id="edit-project-name" name="name" value="${escapeHtml(project.name)}" required /></div>
             <div class="field"><label for="edit-project-path">기본 작업 경로</label><input id="edit-project-path" name="rootDirectory" value="${escapeHtml(project.rootDirectory)}" required /></div>
             <div class="field"><label for="edit-project-description">설명</label><textarea id="edit-project-description" name="description">${escapeHtml(project.description)}</textarea></div>
             <button class="button" type="submit">설정 저장</button>
           </form>
-        </section>
+        </details>
         <section class="panel">
           <h2 class="panel-title">새 워크플로우</h2>
           <p class="panel-description">작업 흐름의 이름을 정하고 단계를 추가합니다.</p>
@@ -1101,9 +1106,14 @@ async function renderWorkflow(workflowId) {
         </div>
       </section>
       <aside class="stack">
-        <section class="panel">
-          <h2 class="panel-title">워크플로우 설정</h2>
-          <p class="panel-description">목록에서 흐름을 구분할 이름과 설명입니다.</p>
+        <details class="panel collapsible-panel">
+          <summary class="panel-summary">
+            <span class="panel-summary-copy">
+              <span class="panel-title" role="heading" aria-level="2">워크플로우 설정</span>
+              <span class="panel-description">목록에서 흐름을 구분할 이름과 설명입니다.</span>
+            </span>
+            <span class="panel-toggle" aria-hidden="true"></span>
+          </summary>
           <form id="edit-workflow-form" class="form-grid">
             <div class="field"><label>이름</label><input name="name" value="${escapeHtml(workflow.name)}" required /></div>
             <div class="field"><label>설명</label><textarea name="description">${escapeHtml(workflow.description)}</textarea></div>
@@ -1112,7 +1122,7 @@ async function renderWorkflow(workflowId) {
               <button class="button danger" type="button" id="delete-workflow">삭제</button>
             </div>
           </form>
-        </section>
+        </details>
         <section class="panel sticky">
           <h2 class="panel-title">새 단계</h2>
           <p class="panel-description">일반 셸 명령을 하나의 순차 실행 단계로 추가합니다.</p>
