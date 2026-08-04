@@ -132,6 +132,29 @@ describe("AppDatabase CRUD", () => {
     expect(recovered.finishedAt).not.toBeNull();
   });
 
+  test("서버 시작 시 취소 처리 중인 실행도 interrupted로 복구한다", () => {
+    const root = join(directory, "canceling-project");
+    mkdirSync(root);
+    const project = db.createProject({ name: "프로젝트", rootDirectory: root });
+    const workflow = db.createWorkflow(project.id, { name: "취소" });
+    db.createStep(workflow.id, { name: "단계", command: "sleep 10" });
+    const run = db.createRun(workflow.id);
+    db.updateRun(run.id, {
+      status: "canceling",
+      startedAt: new Date().toISOString(),
+    });
+    db.updateStepRun(run.steps[0].id, {
+      status: "running",
+      startedAt: new Date().toISOString(),
+    });
+
+    expect(db.recoverInterruptedRuns()).toBe(1);
+
+    const recovered = db.getRun(run.id)!;
+    expect(recovered.status).toBe("interrupted");
+    expect(recovered.steps[0].status).toBe("interrupted");
+  });
+
   test("서버 재시작 복구에서 입력 대기 실행은 그대로 보존한다", () => {
     const root = join(directory, "project");
     mkdirSync(root);

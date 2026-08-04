@@ -538,9 +538,9 @@ export class AppDatabase {
         .query(
           `UPDATE step_runs
            SET status = 'interrupted', finished_at = ?
-           WHERE status IN ('queued', 'running')
+           WHERE status IN ('queued', 'running', 'canceling')
              AND run_id IN (
-               SELECT id FROM runs WHERE status IN ('queued', 'running')
+               SELECT id FROM runs WHERE status IN ('queued', 'running', 'canceling')
              )`,
         )
         .run(timestamp);
@@ -548,7 +548,7 @@ export class AppDatabase {
         .query(
           `UPDATE runs
            SET status = 'interrupted', finished_at = ?, current_step_id = NULL
-           WHERE status IN ('queued', 'running')`,
+           WHERE status IN ('queued', 'running', 'canceling')`,
         )
         .run(timestamp).changes;
     });
@@ -871,7 +871,7 @@ export class AppDatabase {
       const active = this.sqlite
         .query(
           `SELECT id FROM runs
-           WHERE project_id = ? AND status IN ('queued', 'running', 'waiting_input') LIMIT 1`,
+           WHERE project_id = ? AND status IN ('queued', 'running', 'canceling', 'waiting_input') LIMIT 1`,
         )
         .get(project.id) as { id: string } | null;
       if (active) {
@@ -932,7 +932,7 @@ export class AppDatabase {
       this.sqlite
         .query(
           `SELECT 1 AS active FROM runs
-           WHERE project_id = ? AND status IN ('queued', 'running', 'waiting_input') LIMIT 1`,
+           WHERE project_id = ? AND status IN ('queued', 'running', 'canceling', 'waiting_input') LIMIT 1`,
         )
         .get(projectId),
     );

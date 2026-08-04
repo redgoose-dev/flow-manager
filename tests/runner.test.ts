@@ -10,7 +10,7 @@ async function waitForFinished(db: AppDatabase, runId: string, timeoutMs = 4000)
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const run = db.getRun(runId)!;
-    if (!["queued", "running", "waiting_input"].includes(run.status)) return run;
+    if (!["queued", "running", "canceling", "waiting_input"].includes(run.status)) return run;
     await Bun.sleep(20);
   }
   throw new Error("실행 완료를 기다리는 중 타임아웃이 발생했습니다.");
@@ -76,6 +76,25 @@ describe("WorkflowRunner", () => {
     ]);
     expect(logs.indexOf("first")).toBeLessThan(logs.indexOf("second"));
     expect(logs).not.toContain("disabled");
+  });
+
+  test("진행률 출력을 묶어서 저장하고 실행을 완료한다", async () => {
+    const item = workflow();
+    db.createStep(item.id, {
+      name: "진행률 출력",
+      command:
+        "i=0; while [ $i -lt 120 ]; do printf '\\rprogress=%s' \"$i\"; i=$((i + 1)); sleep 0.01; done; printf '\\ncomplete\\n'",
+    });
+
+    const started = runner.start(item.id);
+    const finished = await waitForFinished(db, started.id, 4000);
+    const logs = db
+      .getLogs(started.id)
+      .filter((log) => log.stream === "stdout");
+
+    expect(finished.status).toBe("succeeded");
+    expect(logs.map((log) => log.content).join("")).toContain("progress=119");
+    expect(logs.length).toBeLessThan(40);
   });
 
   test("실패하면 이후 단계를 실행하지 않는다", async () => {
@@ -153,6 +172,26 @@ describe("WorkflowRunner", () => {
       "canceled",
     ]);
     expect(existsSync(join(root, "canceled-marker"))).toBe(false);
+  });
+
+  test("종료한 셸의 하위 프로세스가 pipe를 붙잡아도 취소 후 재실행할 수 있다", async () => {
+    const item = workflow();
+    db.createStep(item.id, {
+      name: "출력 pipe를 붙잡는 작업",
+      command: "sleep 10 & exit 0",
+    });
+    const started = runner.start(item.id);
+    await waitForStatus(db, started.id, "running");
+
+    const requested = runner.cancel(started.id);
+    expect(requested.status).toBe("canceling");
+    const canceled = await waitForFinished(db, started.id, 4000);
+    expect(canceled.status).toBe("canceled");
+
+    const retry = runner.start(item.id);
+    await waitForStatus(db, retry.id, "running");
+    runner.cancel(retry.id);
+    expect((await waitForFinished(db, retry.id, 4000)).status).toBe("canceled");
   });
 
   test("단계 타임아웃을 실패로 처리한다", async () => {

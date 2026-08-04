@@ -14,6 +14,7 @@ const logoutButton = document.querySelector("#logout-button");
 const statusLabels = {
   queued: "대기 중",
   running: "실행 중",
+  canceling: "취소 처리 중",
   waiting_input: "입력 대기 중",
   succeeded: "성공",
   failed: "실패",
@@ -22,7 +23,7 @@ const statusLabels = {
   skipped: "건너뜀",
 };
 
-const activeRunStatuses = ["queued", "running", "waiting_input"];
+const activeRunStatuses = ["queued", "running", "canceling", "waiting_input"];
 
 let activeEventSource = null;
 let currentRun = null;
@@ -1123,10 +1124,6 @@ async function renderWorkflow(workflowId) {
         <h1>${escapeHtml(workflow.name)}</h1>
         <p>${escapeHtml(workflow.description || "단계를 구성하고 실행할 수 있습니다.")}</p>
       </div>
-      <div class="run-actions">
-        <span id="active-step-count">${workflow.steps.filter((step) => step.enabled).length}개 활성 단계</span>
-        <button class="button accent" id="run-workflow" ${hasActiveSteps ? "" : 'disabled title="활성화된 단계를 하나 이상 추가해 주세요."'}>▶ 실행</button>
-      </div>
     </section>
     <div class="split-layout">
       <section>
@@ -1141,7 +1138,19 @@ async function renderWorkflow(workflowId) {
           }
         </div>
       </section>
-      <aside class="stack">
+      <aside class="stack workflow-sidebar">
+        <section class="panel workflow-run-panel">
+          <span class="eyebrow">Workflow control</span>
+          <div>
+            <h2 class="panel-title">워크플로우 실행</h2>
+            <p class="panel-description">저장된 단계 순서대로 실행을 시작합니다.</p>
+          </div>
+          <div class="workflow-run-count">
+            <strong id="active-step-count">${workflow.steps.filter((step) => step.enabled).length}개 활성 단계</strong>
+            <span>실행 대상</span>
+          </div>
+          <button class="button accent" type="button" id="run-workflow" ${hasActiveSteps ? "" : 'disabled title="활성화된 단계를 하나 이상 추가해 주세요."'}>▶ 실행</button>
+        </section>
         <details class="panel collapsible-panel">
           <summary class="panel-summary">
             <span class="panel-summary-copy">
@@ -1159,7 +1168,7 @@ async function renderWorkflow(workflowId) {
             </div>
           </form>
         </details>
-        <section class="panel sticky">
+        <section class="panel">
           <h2 class="panel-title">새 단계</h2>
           <p class="panel-description">일반 셸 명령을 하나의 순차 실행 단계로 추가합니다.</p>
           <form id="create-step-form" class="form-grid">
@@ -1394,7 +1403,10 @@ function updateRunView(run) {
   const duration = document.querySelector("#run-duration");
   if (duration) duration.textContent = formatDuration(run.startedAt, run.finishedAt);
   const cancel = document.querySelector("#cancel-run");
-  if (cancel) cancel.disabled = !activeRunStatuses.includes(run.status);
+  if (cancel) {
+    cancel.disabled = !["queued", "running", "waiting_input"].includes(run.status);
+    cancel.textContent = run.status === "canceling" ? "취소 처리 중…" : "실행 취소";
+  }
   bindInputRequest(run);
 
   for (const step of run.steps) {
@@ -1410,7 +1422,9 @@ function updateRunView(run) {
   }
 
   const toolbar = document.querySelector("#stream-label");
-  if (run.status === "waiting_input") {
+  if (run.status === "canceling") {
+    if (toolbar) toolbar.textContent = "취소 처리 중";
+  } else if (run.status === "waiting_input") {
     if (toolbar) toolbar.textContent = "사용자 입력 대기 중";
   } else if (activeRunStatuses.includes(run.status)) {
     if (toolbar) toolbar.textContent = "실시간 로그 연결됨";
@@ -1441,7 +1455,7 @@ async function renderRun(runId) {
       <div class="run-actions">
         <span class="run-id">${escapeHtml(run.id.slice(0, 12))}</span>
         ${status(run.status).replace("<span ", '<span id="run-status" ')}
-        <button class="button danger" id="cancel-run" ${activeRunStatuses.includes(run.status) ? "" : "disabled"}>실행 취소</button>
+        <button class="button danger" id="cancel-run" ${["queued", "running", "waiting_input"].includes(run.status) ? "" : "disabled"}>${run.status === "canceling" ? "취소 처리 중…" : "실행 취소"}</button>
       </div>
     </section>
     <div id="input-request-region">${inputRequestMarkup(run)}</div>
@@ -1461,7 +1475,7 @@ async function renderRun(runId) {
       <div class="log-pane">
         <div class="log-toolbar">
           <span class="live-dot" id="live-dot"></span>
-          <span id="stream-label">${run.status === "waiting_input" ? "사용자 입력 대기 중" : activeRunStatuses.includes(run.status) ? "실시간 로그 연결 중" : "저장된 로그"}</span>
+          <span id="stream-label">${run.status === "canceling" ? "취소 처리 중" : run.status === "waiting_input" ? "사용자 입력 대기 중" : activeRunStatuses.includes(run.status) ? "실시간 로그 연결 중" : "저장된 로그"}</span>
           <button type="button" id="scroll-log">맨 아래로 ↓</button>
         </div>
         <pre class="log-output" id="log-output" aria-live="polite"></pre>

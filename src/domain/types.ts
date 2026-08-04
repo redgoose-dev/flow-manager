@@ -1,6 +1,7 @@
 export type RunStatus =
   | "queued"
   | "running"
+  | "canceling"
   | "waiting_input"
   | "succeeded"
   | "failed"

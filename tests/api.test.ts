@@ -331,9 +331,12 @@ describe("HTTP API", () => {
     expect(clientJavaScript).toContain("navigator.credentials.create");
     expect(clientJavaScript).toContain("navigator.credentials.get");
     expect(clientJavaScript).toContain("waiting_input");
+    expect(clientJavaScript).toContain("canceling");
     expect(clientJavaScript).toContain("inputSensitive");
     expect(clientJavaScript).toContain("/input");
     expect(clientJavaScript).toContain('data-action="run-workflow"');
+    expect(clientJavaScript).toContain("workflow-sidebar");
+    expect(clientJavaScript).toContain("workflow-run-panel");
     expect(clientJavaScript).toContain("/manifest.webmanifest?revision=");
     expect(clientJavaScript).not.toContain(">단계 저장</button>");
     expect(favicon.status).toBe(200);

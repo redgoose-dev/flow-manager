@@ -14,6 +14,9 @@ interface RunControl {
   projectId: string;
   canceled: boolean;
   timedOut: boolean;
+  finalized: boolean;
+  cancelTimer: ReturnType<typeof setTimeout> | null;
+  outputAbortController: AbortController | null;
   process: ReturnType<typeof Bun.spawn> | null;
 }
 
@@ -24,6 +27,9 @@ interface SuppliedInput {
 }
 
 const timestamp = () => new Date().toISOString();
+const LOG_BATCH_INTERVAL_MS = 100;
+const LOG_BATCH_MAX_LENGTH = 16_384;
+const CANCELLATION_GRACE_MS = 2_000;
 
 function signalProcess(pid: number, signal: NodeJS.Signals) {
   try {
@@ -61,29 +67,35 @@ function processTree(pid: number): number[] {
 
 function terminateProcessTree(control: RunControl) {
   const subprocess = control.process;
-  if (!subprocess || subprocess.exitCode !== null) return;
+  if (!subprocess) return;
   const groupTerminated =
     process.platform !== "win32" &&
     signalProcess(-subprocess.pid, "SIGTERM");
-  const descendants = groupTerminated ? [] : processTree(subprocess.pid);
+  const descendants =
+    groupTerminated || subprocess.exitCode !== null
+      ? []
+      : processTree(subprocess.pid);
   if (!groupTerminated) {
     for (const pid of descendants) signalProcess(pid, "SIGTERM");
-    try {
-      subprocess.kill("SIGTERM");
-    } catch {
-      // The process may already have exited.
+    if (subprocess.exitCode === null) {
+      try {
+        subprocess.kill("SIGTERM");
+      } catch {
+        // The process may already have exited.
+      }
     }
   }
   setTimeout(() => {
-    if (subprocess.exitCode !== null) return;
     if (groupTerminated) {
       signalProcess(-subprocess.pid, "SIGKILL");
     } else {
       for (const pid of descendants) signalProcess(pid, "SIGKILL");
-      try {
-        subprocess.kill("SIGKILL");
-      } catch {
-        // The process may already have exited.
+      if (subprocess.exitCode === null) {
+        try {
+          subprocess.kill("SIGKILL");
+        } catch {
+          // The process may already have exited.
+        }
       }
     }
   }, 750);
@@ -147,6 +159,7 @@ export class WorkflowRunner {
   cancel(runId: string) {
     const run = this.db.getRun(runId);
     if (!run) throw new AppError("실행을 찾을 수 없습니다.", 404, "not_found");
+    if (run.status === "canceling") return run;
     if (!["queued", "running", "waiting_input"].includes(run.status)) {
       throw new AppError(
         "대기 중이거나 실행 중인 작업만 취소할 수 있습니다.",
@@ -160,7 +173,13 @@ export class WorkflowRunner {
     if (control) {
       control.canceled = true;
       this.log(runId, null, "system", "\n[workflow-manager] 취소 요청을 받았습니다.\n");
-      terminateProcessTree(control);
+      if (run.status === "running") {
+        this.db.updateRun(runId, { status: "canceling" });
+        terminateProcessTree(control);
+        this.scheduleCancellation(control);
+      } else {
+        this.finalizeCanceled(control);
+      }
     } else {
       const finishedAt = timestamp();
       this.db.updateRemainingSteps(runId, "canceled");
@@ -266,31 +285,113 @@ export class WorkflowRunner {
     stream: "stdout" | "stderr",
     readable: ReadableStream<Uint8Array> | null,
     secret: string | null = null,
+    signal?: AbortSignal,
   ) {
     if (!readable) return;
     const reader = readable.getReader();
     const decoder = new TextDecoder();
     const redactor = secret ? new SecretRedactor(secret) : null;
+    let pending = "";
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const flush = (final = false) => {
+      if (pending || final) {
+        const content = pending;
+        pending = "";
+        const output = redactor ? redactor.write(content, final) : content;
+        if (output) this.log(runId, stepRunId, stream, output);
+      }
+    };
+
+    const scheduleFlush = () => {
+      if (flushTimer !== null) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        flush();
+      }, LOG_BATCH_INTERVAL_MS);
+    };
+
+    const cancelReader = () => {
+      void reader.cancel().catch(() => undefined);
+    };
+    if (signal?.aborted) cancelReader();
+    else signal?.addEventListener("abort", cancelReader, { once: true });
+
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const decoded = decoder.decode(value, { stream: true });
-        this.log(
-          runId,
-          stepRunId,
-          stream,
-          redactor ? redactor.write(decoded) : decoded,
-        );
+        pending += decoded;
+        if (pending.length >= LOG_BATCH_MAX_LENGTH) {
+          if (flushTimer !== null) clearTimeout(flushTimer);
+          flushTimer = null;
+          flush();
+          await Bun.sleep(0);
+        } else {
+          scheduleFlush();
+        }
       }
-      const remainder = decoder.decode();
-      const finalContent = redactor
-        ? redactor.write(remainder, true)
-        : remainder;
-      if (finalContent) this.log(runId, stepRunId, stream, finalContent);
+      pending += decoder.decode();
+      if (flushTimer !== null) clearTimeout(flushTimer);
+      flushTimer = null;
+      flush(true);
+    } catch (error) {
+      if (!signal?.aborted) throw error;
     } finally {
+      if (flushTimer !== null) clearTimeout(flushTimer);
+      signal?.removeEventListener("abort", cancelReader);
       reader.releaseLock();
     }
+  }
+
+  private finalizeCanceled(control: RunControl) {
+    if (control.finalized) return;
+    control.finalized = true;
+    if (control.cancelTimer) clearTimeout(control.cancelTimer);
+    control.cancelTimer = null;
+    control.outputAbortController?.abort();
+
+    const run = this.db.getRun(control.runId);
+    if (
+      !run ||
+      !["queued", "running", "canceling", "waiting_input"].includes(run.status)
+    ) {
+      return;
+    }
+    const activeStep =
+      run.steps.find(
+        (step) =>
+          step.stepId === run.currentStepId &&
+          ["queued", "running", "waiting_input"].includes(step.status),
+      ) ??
+      run.steps.find((step) =>
+        ["queued", "running", "waiting_input"].includes(step.status),
+      );
+    if (activeStep) {
+      this.db.updateStepRun(activeStep.id, {
+        status: "canceled",
+        finishedAt: timestamp(),
+        exitCode: null,
+      });
+    }
+    this.db.updateRemainingSteps(control.runId, "canceled");
+    this.log(
+      control.runId,
+      null,
+      "system",
+      "\n[workflow-manager] 프로세스 종료를 기다리지 않고 취소를 확정했습니다.\n",
+    );
+    this.finishRun(control.runId, "canceled", null);
+  }
+
+  private scheduleCancellation(control: RunControl) {
+    if (control.cancelTimer) return;
+    control.cancelTimer = setTimeout(() => {
+      if (!control.canceled || control.finalized) return;
+      terminateProcessTree(control);
+      this.finalizeCanceled(control);
+    }, CANCELLATION_GRACE_MS);
   }
 
   private finishRun(
@@ -315,6 +416,9 @@ export class WorkflowRunner {
       projectId: run.projectId,
       canceled: false,
       timedOut: false,
+      finalized: false,
+      cancelTimer: null,
+      outputAbortController: null,
       process: null,
     };
     this.controls.set(runId, control);
@@ -335,11 +439,11 @@ export class WorkflowRunner {
       this.emitRun(runId);
 
       for (const step of run.steps) {
+        if (control.finalized) return;
         if (step.status === "succeeded") continue;
         if (step.status !== "queued") continue;
         if (control.canceled) {
-          this.db.updateRemainingSteps(runId, "canceled");
-          this.finishRun(runId, "canceled", null);
+          this.finalizeCanceled(control);
           return;
         }
 
@@ -399,6 +503,11 @@ export class WorkflowRunner {
           return;
         }
 
+        if (control.canceled) {
+          this.finalizeCanceled(control);
+          return;
+        }
+
         control.timedOut = false;
         let timeout: ReturnType<typeof setTimeout> | null = null;
         let exitCode = 1;
@@ -435,12 +544,15 @@ export class WorkflowRunner {
               terminateProcessTree(control);
             }, step.timeoutSeconds * 1000);
           }
+          const outputAbortController = new AbortController();
+          control.outputAbortController = outputAbortController;
           const stdout = this.consume(
             runId,
             step.id,
             "stdout",
             subprocess.stdout as ReadableStream<Uint8Array>,
             stepInput?.sensitive ? stepInput.value : null,
+            outputAbortController.signal,
           );
           const stderr = this.consume(
             runId,
@@ -448,6 +560,7 @@ export class WorkflowRunner {
             "stderr",
             subprocess.stderr as ReadableStream<Uint8Array>,
             stepInput?.sensitive ? stepInput.value : null,
+            outputAbortController.signal,
           );
           exitCode = await subprocess.exited;
           await Promise.all([stdout, stderr]);
@@ -462,20 +575,16 @@ export class WorkflowRunner {
           exitCode = 1;
         } finally {
           if (timeout) clearTimeout(timeout);
+          control.outputAbortController = null;
           control.process = null;
         }
+        if (control.finalized) return;
         if (stepInput) stepInput.value = "";
         suppliedInput = undefined;
 
         const finishedAt = timestamp();
         if (control.canceled) {
-          this.db.updateStepRun(step.id, {
-            status: "canceled",
-            finishedAt,
-            exitCode: null,
-          });
-          this.db.updateRemainingSteps(runId, "canceled");
-          this.finishRun(runId, "canceled", null);
+          this.finalizeCanceled(control);
           return;
         }
         if (control.timedOut) {
@@ -521,6 +630,11 @@ export class WorkflowRunner {
       );
       this.finishRun(runId, "succeeded", 0);
     } catch (error) {
+      if (control.finalized) return;
+      if (control.canceled) {
+        this.finalizeCanceled(control);
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.log(
         runId,
@@ -531,6 +645,7 @@ export class WorkflowRunner {
       this.db.updateRemainingSteps(runId, "skipped");
       this.finishRun(runId, control.canceled ? "canceled" : "failed", null);
     } finally {
+      if (control.cancelTimer) clearTimeout(control.cancelTimer);
       this.controls.delete(runId);
     }
   }
