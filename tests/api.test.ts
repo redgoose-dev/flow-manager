@@ -20,6 +20,7 @@ describe("HTTP API", () => {
   let root: string;
   let db: AppDatabase;
   let app: ReturnType<typeof createApp>;
+  let runner: WorkflowRunner;
   let sessionCookie: string;
   let csrfToken: string;
 
@@ -66,15 +67,17 @@ describe("HTTP API", () => {
     const session = auth.issueSession(user.id);
     sessionCookie = session.cookie.split(";", 1)[0];
     csrfToken = session.csrfToken;
+    runner = new WorkflowRunner(db);
     app = createApp({
       db,
-      runner: new WorkflowRunner(db),
+      runner,
       environmentSettings,
       auth,
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await runner.shutdown();
     db.close();
     rmSync(directory, { recursive: true, force: true });
   });

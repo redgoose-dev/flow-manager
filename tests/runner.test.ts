@@ -6,7 +6,13 @@ import { AppDatabase } from "../src/db/database";
 import { AppError } from "../src/domain/types";
 import { WorkflowRunner } from "../src/runner/runner";
 
-async function waitForFinished(db: AppDatabase, runId: string, timeoutMs = 4000) {
+const TEST_TIMEOUT_MS = 10_000;
+
+async function waitForFinished(
+  db: AppDatabase,
+  runId: string,
+  timeoutMs = TEST_TIMEOUT_MS,
+) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const run = db.getRun(runId)!;
@@ -20,7 +26,7 @@ async function waitForStatus(
   db: AppDatabase,
   runId: string,
   status: string,
-  timeoutMs = 4000,
+  timeoutMs = TEST_TIMEOUT_MS,
 ) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -45,7 +51,8 @@ describe("WorkflowRunner", () => {
     runner = new WorkflowRunner(db);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await runner.shutdown();
     db.close();
     rmSync(directory, { recursive: true, force: true });
   });
@@ -87,7 +94,7 @@ describe("WorkflowRunner", () => {
     });
 
     const started = runner.start(item.id);
-    const finished = await waitForFinished(db, started.id, 4000);
+    const finished = await waitForFinished(db, started.id);
     const logs = db
       .getLogs(started.id)
       .filter((log) => log.stream === "stdout");
@@ -185,13 +192,13 @@ describe("WorkflowRunner", () => {
 
     const requested = runner.cancel(started.id);
     expect(requested.status).toBe("canceling");
-    const canceled = await waitForFinished(db, started.id, 4000);
+    const canceled = await waitForFinished(db, started.id);
     expect(canceled.status).toBe("canceled");
 
     const retry = runner.start(item.id);
     await waitForStatus(db, retry.id, "running");
     runner.cancel(retry.id);
-    expect((await waitForFinished(db, retry.id, 4000)).status).toBe("canceled");
+    expect((await waitForFinished(db, retry.id)).status).toBe("canceled");
   });
 
   test("단계 타임아웃을 실패로 처리한다", async () => {

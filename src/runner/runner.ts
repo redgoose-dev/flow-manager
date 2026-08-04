@@ -128,13 +128,14 @@ class SecretRedactor {
 
 export class WorkflowRunner {
   private readonly controls = new Map<string, RunControl>();
+  private readonly executions = new Map<string, Promise<void>>();
   private readonly subscribers = new Map<string, Set<Subscriber>>();
 
   constructor(private readonly db: AppDatabase) {}
 
   start(workflowId: string) {
     const run = this.db.createRun(workflowId);
-    queueMicrotask(() => void this.execute(run.id));
+    this.scheduleExecution(run.id);
     return run;
   }
 
@@ -152,8 +153,52 @@ export class WorkflowRunner {
       "[workflow-manager] 입력을 받아 실행을 재개합니다. 입력값은 저장하지 않습니다.\n",
     );
     this.emitRun(runId);
-    queueMicrotask(() => void this.execute(runId, suppliedInput));
+    this.scheduleExecution(runId, suppliedInput);
     return this.db.getRun(runId)!;
+  }
+
+  async shutdown() {
+    const runIds = new Set([
+      ...this.controls.keys(),
+      ...this.executions.keys(),
+    ]);
+    for (const runId of runIds) {
+      try {
+        const run = this.db.getRun(runId);
+        if (
+          run &&
+          ["queued", "running", "waiting_input"].includes(run.status)
+        ) {
+          this.cancel(runId);
+        }
+      } catch {
+        // Preserve the original test or shutdown error if a run is already gone.
+      }
+    }
+    await this.waitForIdle();
+  }
+
+  private scheduleExecution(runId: string, suppliedInput?: SuppliedInput) {
+    const execution = Promise.resolve().then(() =>
+      this.execute(runId, suppliedInput),
+    );
+    this.executions.set(runId, execution);
+    void execution.then(
+      () => this.clearExecution(runId, execution),
+      () => this.clearExecution(runId, execution),
+    );
+  }
+
+  private clearExecution(runId: string, execution: Promise<void>) {
+    if (this.executions.get(runId) === execution) {
+      this.executions.delete(runId);
+    }
+  }
+
+  private async waitForIdle() {
+    while (this.executions.size) {
+      await Promise.allSettled(this.executions.values());
+    }
   }
 
   cancel(runId: string) {
