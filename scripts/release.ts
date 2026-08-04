@@ -162,6 +162,31 @@ function createReleaseWorktree(repoRoot: string, worktree: string) {
     git(["worktree", "add", worktree, RELEASE_BRANCH], repoRoot);
     return;
   }
+  if (
+    gitSucceeds(
+      [
+        "show-ref",
+        "--verify",
+        "--quiet",
+        `refs/remotes/origin/${RELEASE_BRANCH}`,
+      ],
+      repoRoot,
+    )
+  ) {
+    git(
+      [
+        "worktree",
+        "add",
+        "--track",
+        "-b",
+        RELEASE_BRANCH,
+        worktree,
+        `origin/${RELEASE_BRANCH}`,
+      ],
+      repoRoot,
+    );
+    return;
+  }
   git(["worktree", "add", "--detach", worktree, "HEAD"], repoRoot);
   git(["switch", "--orphan", RELEASE_BRANCH], worktree);
 }
