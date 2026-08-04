@@ -20773,7 +20773,22 @@ async function verifyAuthenticationResponse(options) {
 var SESSION_COOKIE = "workflow_manager_session";
 var CHALLENGE_TTL_MS = 5 * 60 * 1000;
 var SETUP_TTL_MS = 15 * 60 * 1000;
-var SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+var SESSION_TTL_HOUR_MS = 60 * 60 * 1000;
+var DEFAULT_SESSION_TTL_MS = 12 * SESSION_TTL_HOUR_MS;
+var MAX_SESSION_TTL_HOURS = 30 * 24;
+function parseSessionTtlHours(value) {
+  if (value === undefined || value.trim() === "") {
+    return DEFAULT_SESSION_TTL_MS;
+  }
+  if (!/^\d+$/.test(value.trim())) {
+    throw new Error("WORKFLOW_MANAGER_SESSION_TTL_HOURS\uB294 1\uC5D0\uC11C 720 \uC0AC\uC774\uC758 \uC815\uC218\uC5EC\uC57C \uD569\uB2C8\uB2E4.");
+  }
+  const hours = Number(value.trim());
+  if (hours < 1 || hours > MAX_SESSION_TTL_HOURS) {
+    throw new Error("WORKFLOW_MANAGER_SESSION_TTL_HOURS\uB294 1\uC5D0\uC11C 720 \uC0AC\uC774\uC758 \uC815\uC218\uC5EC\uC57C \uD569\uB2C8\uB2E4.");
+  }
+  return hours * SESSION_TTL_HOUR_MS;
+}
 function randomToken(bytes = 32) {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(bytes))).toString("base64url");
 }
@@ -21166,7 +21181,8 @@ class PasskeyAuth {
     const token = randomToken();
     const csrfToken = randomToken();
     const createdAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+    const sessionTtlMs = this.config.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
+    const expiresAt = new Date(Date.now() + sessionTtlMs).toISOString();
     this.db.createAuthSession({
       tokenHash: sha2562(token),
       userId,
@@ -21179,7 +21195,7 @@ class PasskeyAuth {
       token,
       csrfToken,
       expiresAt,
-      cookie: `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${secure}`
+      cookie: `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(sessionTtlMs / 1000)}${secure}`
     };
   }
   logout(request) {
@@ -21227,10 +21243,12 @@ var interruptedCount = db.recoverInterruptedRuns();
 var runner = new WorkflowRunner(db);
 var configuredPasskeyOrigin = environmentValue("WORKFLOW_MANAGER_ORIGIN");
 var passkeyOrigin = configuredPasskeyOrigin ?? `http://localhost:${port}`;
+var sessionTtlMs = parseSessionTtlHours(environmentValue("WORKFLOW_MANAGER_SESSION_TTL_HOURS"));
 var passkeyAuth = new PasskeyAuth(db, {
   rpID: environmentValue("WORKFLOW_MANAGER_RP_ID") ?? "localhost",
   rpName: environmentValue("WORKFLOW_MANAGER_RP_NAME") ?? environmentSettings.applicationSettings().name,
-  expectedOrigin: passkeyOrigin
+  expectedOrigin: passkeyOrigin,
+  sessionTtlMs
 });
 var app = createApp({
   db,
