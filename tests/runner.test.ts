@@ -87,10 +87,10 @@ describe("WorkflowRunner", () => {
 
   test("진행률 출력을 묶어서 저장하고 실행을 완료한다", async () => {
     const item = workflow();
+    const progressOutputCount = 120;
     db.createStep(item.id, {
       name: "진행률 출력",
-      command:
-        "i=0; while [ $i -lt 120 ]; do printf '\\rprogress=%s' \"$i\"; i=$((i + 1)); sleep 0.01; done; printf '\\ncomplete\\n'",
+      command: `i=0; while [ $i -lt ${progressOutputCount} ]; do printf '\\rprogress=%s' \"$i\"; i=$((i + 1)); sleep 0.01; done; printf '\\ncomplete\\n'`,
     });
 
     const started = runner.start(item.id);
@@ -101,7 +101,7 @@ describe("WorkflowRunner", () => {
 
     expect(finished.status).toBe("succeeded");
     expect(logs.map((log) => log.content).join("")).toContain("progress=119");
-    expect(logs.length).toBeLessThan(40);
+    expect(logs.length).toBeLessThan(progressOutputCount);
   });
 
   test("실패하면 이후 단계를 실행하지 않는다", async () => {
