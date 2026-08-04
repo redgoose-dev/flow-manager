@@ -6,7 +6,7 @@ import { AppDatabase } from "../src/db/database";
 import { AppError } from "../src/domain/types";
 import { WorkflowRunner } from "../src/runner/runner";
 
-const TEST_TIMEOUT_MS = 10_000;
+const TEST_TIMEOUT_MS = 8_000;
 
 async function waitForFinished(
   db: AppDatabase,
@@ -87,10 +87,12 @@ describe("WorkflowRunner", () => {
 
   test("진행률 출력을 묶어서 저장하고 실행을 완료한다", async () => {
     const item = workflow();
-    const progressOutputCount = 120;
+    const progressBatchCount = 4;
+    const progressPerBatch = 10;
+    const progressOutputCount = progressBatchCount * progressPerBatch;
     db.createStep(item.id, {
       name: "진행률 출력",
-      command: `i=0; while [ $i -lt ${progressOutputCount} ]; do printf '\\rprogress=%s' \"$i\"; i=$((i + 1)); sleep 0.01; done; printf '\\ncomplete\\n'`,
+      command: `batch=0; while [ "$batch" -lt ${progressBatchCount} ]; do offset=0; while [ "$offset" -lt ${progressPerBatch} ]; do progress=$((batch * ${progressPerBatch} + offset)); printf '\\rprogress=%s' \"$progress\"; offset=$((offset + 1)); done; sleep 0.1; batch=$((batch + 1)); done; printf '\\ncomplete\\n'`,
     });
 
     const started = runner.start(item.id);
@@ -100,7 +102,9 @@ describe("WorkflowRunner", () => {
       .filter((log) => log.stream === "stdout");
 
     expect(finished.status).toBe("succeeded");
-    expect(logs.map((log) => log.content).join("")).toContain("progress=119");
+    expect(logs.map((log) => log.content).join("")).toContain(
+      `progress=${progressOutputCount - 1}`,
+    );
     expect(logs.length).toBeLessThan(progressOutputCount);
   });
 

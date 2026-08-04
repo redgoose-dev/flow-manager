@@ -246,7 +246,7 @@ function main() {
   try {
     console.log(`릴리스 ${version}을 생성합니다.`);
     run(
-      [process.execPath, "test", "--parallel=1", "--timeout=15000"],
+      [process.execPath, "test", "--parallel=1", "--timeout=10000"],
       repoRoot,
     );
     buildArtifact(repoRoot, artifactDirectory, metadata);
