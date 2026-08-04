@@ -2451,13 +2451,13 @@ class AppDatabase {
     const transaction = this.sqlite.transaction(() => {
       this.sqlite.query(`UPDATE step_runs
            SET status = 'interrupted', finished_at = ?
-           WHERE status IN ('queued', 'running')
+           WHERE status IN ('queued', 'running', 'canceling')
              AND run_id IN (
-               SELECT id FROM runs WHERE status IN ('queued', 'running')
+               SELECT id FROM runs WHERE status IN ('queued', 'running', 'canceling')
              )`).run(timestamp);
       return this.sqlite.query(`UPDATE runs
            SET status = 'interrupted', finished_at = ?, current_step_id = NULL
-           WHERE status IN ('queued', 'running')`).run(timestamp).changes;
+           WHERE status IN ('queued', 'running', 'canceling')`).run(timestamp).changes;
     });
     return transaction();
   }
@@ -2615,7 +2615,7 @@ class AppDatabase {
     const createdAt = now();
     const transaction = this.sqlite.transaction(() => {
       const active = this.sqlite.query(`SELECT id FROM runs
-           WHERE project_id = ? AND status IN ('queued', 'running', 'waiting_input') LIMIT 1`).get(project.id);
+           WHERE project_id = ? AND status IN ('queued', 'running', 'canceling', 'waiting_input') LIMIT 1`).get(project.id);
       if (active) {
         throw new AppError("\uC774 \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C \uC774\uBBF8 \uC6CC\uD06C\uD50C\uB85C\uC6B0\uAC00 \uC2E4\uD589 \uC911\uC785\uB2C8\uB2E4.", 409, "project_busy");
       }
@@ -2640,7 +2640,7 @@ class AppDatabase {
   }
   hasActiveProjectRun(projectId) {
     return Boolean(this.sqlite.query(`SELECT 1 AS active FROM runs
-           WHERE project_id = ? AND status IN ('queued', 'running', 'waiting_input') LIMIT 1`).get(projectId));
+           WHERE project_id = ? AND status IN ('queued', 'running', 'canceling', 'waiting_input') LIMIT 1`).get(projectId));
   }
   getRun(runId) {
     const row = this.sqlite.query(`SELECT r.*, p.name AS project_name, p.root_directory
@@ -2853,6 +2853,9 @@ function resolveWorkingDirectory(root, child) {
 
 // src/runner/runner.ts
 var timestamp = () => new Date().toISOString();
+var LOG_BATCH_INTERVAL_MS = 100;
+var LOG_BATCH_MAX_LENGTH = 16384;
+var CANCELLATION_GRACE_MS = 2000;
 function signalProcess(pid, signal) {
   try {
     process.kill(pid, signal);
@@ -2881,28 +2884,30 @@ function processTree(pid) {
 }
 function terminateProcessTree(control) {
   const subprocess = control.process;
-  if (!subprocess || subprocess.exitCode !== null)
+  if (!subprocess)
     return;
   const groupTerminated = process.platform !== "win32" && signalProcess(-subprocess.pid, "SIGTERM");
-  const descendants = groupTerminated ? [] : processTree(subprocess.pid);
+  const descendants = groupTerminated || subprocess.exitCode !== null ? [] : processTree(subprocess.pid);
   if (!groupTerminated) {
     for (const pid of descendants)
       signalProcess(pid, "SIGTERM");
-    try {
-      subprocess.kill("SIGTERM");
-    } catch {}
+    if (subprocess.exitCode === null) {
+      try {
+        subprocess.kill("SIGTERM");
+      } catch {}
+    }
   }
   setTimeout(() => {
-    if (subprocess.exitCode !== null)
-      return;
     if (groupTerminated) {
       signalProcess(-subprocess.pid, "SIGKILL");
     } else {
       for (const pid of descendants)
         signalProcess(pid, "SIGKILL");
-      try {
-        subprocess.kill("SIGKILL");
-      } catch {}
+      if (subprocess.exitCode === null) {
+        try {
+          subprocess.kill("SIGKILL");
+        } catch {}
+      }
     }
   }, 750);
 }
@@ -2962,6 +2967,8 @@ class WorkflowRunner {
     const run = this.db.getRun(runId);
     if (!run)
       throw new AppError("\uC2E4\uD589\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.", 404, "not_found");
+    if (run.status === "canceling")
+      return run;
     if (!["queued", "running", "waiting_input"].includes(run.status)) {
       throw new AppError("\uB300\uAE30 \uC911\uC774\uAC70\uB098 \uC2E4\uD589 \uC911\uC778 \uC791\uC5C5\uB9CC \uCDE8\uC18C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.", 409, "run_finished");
     }
@@ -2972,7 +2979,13 @@ class WorkflowRunner {
       this.log(runId, null, "system", `
 [workflow-manager] \uCDE8\uC18C \uC694\uCCAD\uC744 \uBC1B\uC558\uC2B5\uB2C8\uB2E4.
 `);
-      terminateProcessTree(control);
+      if (run.status === "running") {
+        this.db.updateRun(runId, { status: "canceling" });
+        terminateProcessTree(control);
+        this.scheduleCancellation(control);
+      } else {
+        this.finalizeCanceled(control);
+      }
     } else {
       const finishedAt = timestamp();
       this.db.updateRemainingSteps(runId, "canceled");
@@ -3065,27 +3078,107 @@ data: ${JSON.stringify(event.data)}
     const log = this.db.appendLog(runId, stepRunId, stream, content);
     this.emit(runId, { type: "log", data: log });
   }
-  async consume(runId, stepRunId, stream, readable, secret = null) {
+  async consume(runId, stepRunId, stream, readable, secret = null, signal) {
     if (!readable)
       return;
     const reader = readable.getReader();
     const decoder = new TextDecoder;
     const redactor = secret ? new SecretRedactor(secret) : null;
+    let pending = "";
+    let flushTimer = null;
+    const flush = (final = false) => {
+      if (pending || final) {
+        const content = pending;
+        pending = "";
+        const output = redactor ? redactor.write(content, final) : content;
+        if (output)
+          this.log(runId, stepRunId, stream, output);
+      }
+    };
+    const scheduleFlush = () => {
+      if (flushTimer !== null)
+        return;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        flush();
+      }, LOG_BATCH_INTERVAL_MS);
+    };
+    const cancelReader = () => {
+      reader.cancel().catch(() => {
+        return;
+      });
+    };
+    if (signal?.aborted)
+      cancelReader();
+    else
+      signal?.addEventListener("abort", cancelReader, { once: true });
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done)
           break;
         const decoded = decoder.decode(value, { stream: true });
-        this.log(runId, stepRunId, stream, redactor ? redactor.write(decoded) : decoded);
+        pending += decoded;
+        if (pending.length >= LOG_BATCH_MAX_LENGTH) {
+          if (flushTimer !== null)
+            clearTimeout(flushTimer);
+          flushTimer = null;
+          flush();
+          await Bun.sleep(0);
+        } else {
+          scheduleFlush();
+        }
       }
-      const remainder = decoder.decode();
-      const finalContent = redactor ? redactor.write(remainder, true) : remainder;
-      if (finalContent)
-        this.log(runId, stepRunId, stream, finalContent);
+      pending += decoder.decode();
+      if (flushTimer !== null)
+        clearTimeout(flushTimer);
+      flushTimer = null;
+      flush(true);
+    } catch (error) {
+      if (!signal?.aborted)
+        throw error;
     } finally {
+      if (flushTimer !== null)
+        clearTimeout(flushTimer);
+      signal?.removeEventListener("abort", cancelReader);
       reader.releaseLock();
     }
+  }
+  finalizeCanceled(control) {
+    if (control.finalized)
+      return;
+    control.finalized = true;
+    if (control.cancelTimer)
+      clearTimeout(control.cancelTimer);
+    control.cancelTimer = null;
+    control.outputAbortController?.abort();
+    const run = this.db.getRun(control.runId);
+    if (!run || !["queued", "running", "canceling", "waiting_input"].includes(run.status)) {
+      return;
+    }
+    const activeStep = run.steps.find((step) => step.stepId === run.currentStepId && ["queued", "running", "waiting_input"].includes(step.status)) ?? run.steps.find((step) => ["queued", "running", "waiting_input"].includes(step.status));
+    if (activeStep) {
+      this.db.updateStepRun(activeStep.id, {
+        status: "canceled",
+        finishedAt: timestamp(),
+        exitCode: null
+      });
+    }
+    this.db.updateRemainingSteps(control.runId, "canceled");
+    this.log(control.runId, null, "system", `
+[workflow-manager] \uD504\uB85C\uC138\uC2A4 \uC885\uB8CC\uB97C \uAE30\uB2E4\uB9AC\uC9C0 \uC54A\uACE0 \uCDE8\uC18C\uB97C \uD655\uC815\uD588\uC2B5\uB2C8\uB2E4.
+`);
+    this.finishRun(control.runId, "canceled", null);
+  }
+  scheduleCancellation(control) {
+    if (control.cancelTimer)
+      return;
+    control.cancelTimer = setTimeout(() => {
+      if (!control.canceled || control.finalized)
+        return;
+      terminateProcessTree(control);
+      this.finalizeCanceled(control);
+    }, CANCELLATION_GRACE_MS);
   }
   finishRun(runId, status, exitCode) {
     this.db.updateRun(runId, {
@@ -3105,6 +3198,9 @@ data: ${JSON.stringify(event.data)}
       projectId: run.projectId,
       canceled: false,
       timedOut: false,
+      finalized: false,
+      cancelTimer: null,
+      outputAbortController: null,
       process: null
     };
     this.controls.set(runId, control);
@@ -3119,13 +3215,14 @@ data: ${JSON.stringify(event.data)}
       }
       this.emitRun(runId);
       for (const step of run.steps) {
+        if (control.finalized)
+          return;
         if (step.status === "succeeded")
           continue;
         if (step.status !== "queued")
           continue;
         if (control.canceled) {
-          this.db.updateRemainingSteps(runId, "canceled");
-          this.finishRun(runId, "canceled", null);
+          this.finalizeCanceled(control);
           return;
         }
         const stepInput = suppliedInput?.stepRunId === step.id ? suppliedInput : undefined;
@@ -3169,6 +3266,10 @@ $ ${step.command}
           this.finishRun(runId, "failed", 1);
           return;
         }
+        if (control.canceled) {
+          this.finalizeCanceled(control);
+          return;
+        }
         control.timedOut = false;
         let timeout = null;
         let exitCode = 1;
@@ -3198,8 +3299,10 @@ $ ${step.command}
               terminateProcessTree(control);
             }, step.timeoutSeconds * 1000);
           }
-          const stdout = this.consume(runId, step.id, "stdout", subprocess.stdout, stepInput?.sensitive ? stepInput.value : null);
-          const stderr = this.consume(runId, step.id, "stderr", subprocess.stderr, stepInput?.sensitive ? stepInput.value : null);
+          const outputAbortController = new AbortController;
+          control.outputAbortController = outputAbortController;
+          const stdout = this.consume(runId, step.id, "stdout", subprocess.stdout, stepInput?.sensitive ? stepInput.value : null, outputAbortController.signal);
+          const stderr = this.consume(runId, step.id, "stderr", subprocess.stderr, stepInput?.sensitive ? stepInput.value : null, outputAbortController.signal);
           exitCode = await subprocess.exited;
           await Promise.all([stdout, stderr]);
         } catch (error) {
@@ -3210,20 +3313,17 @@ $ ${step.command}
         } finally {
           if (timeout)
             clearTimeout(timeout);
+          control.outputAbortController = null;
           control.process = null;
         }
+        if (control.finalized)
+          return;
         if (stepInput)
           stepInput.value = "";
         suppliedInput = undefined;
         const finishedAt = timestamp();
         if (control.canceled) {
-          this.db.updateStepRun(step.id, {
-            status: "canceled",
-            finishedAt,
-            exitCode: null
-          });
-          this.db.updateRemainingSteps(runId, "canceled");
-          this.finishRun(runId, "canceled", null);
+          this.finalizeCanceled(control);
           return;
         }
         if (control.timedOut) {
@@ -3261,6 +3361,12 @@ $ ${step.command}
 `);
       this.finishRun(runId, "succeeded", 0);
     } catch (error) {
+      if (control.finalized)
+        return;
+      if (control.canceled) {
+        this.finalizeCanceled(control);
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.log(runId, null, "system", `
 [workflow-manager] \uC2E4\uD589 \uC624\uB958: ${message}
@@ -3268,6 +3374,8 @@ $ ${step.command}
       this.db.updateRemainingSteps(runId, "skipped");
       this.finishRun(runId, control.canceled ? "canceled" : "failed", null);
     } finally {
+      if (control.cancelTimer)
+        clearTimeout(control.cancelTimer);
       this.controls.delete(runId);
     }
   }

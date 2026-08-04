@@ -417,6 +417,51 @@ button {
   gap: 16px;
 }
 
+.workflow-sidebar {
+  position: sticky;
+  top: 84px;
+  align-self: start;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.workflow-run-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.workflow-run-panel .panel-description {
+  margin-bottom: 0;
+}
+
+.workflow-run-panel .button {
+  width: 100%;
+}
+
+.workflow-run-count {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 15px;
+  border: 1px solid var(--color-brand-border-hover);
+  border-radius: 10px;
+  background: var(--color-brand-subtle);
+}
+
+.workflow-run-count strong {
+  color: var(--color-brand-strong);
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.workflow-run-count span {
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+}
+
 .panel,
 .project-row,
 .workflow-row,
@@ -621,6 +666,10 @@ button {
   color: var(--color-status-running);
 }
 
+.status-canceling {
+  color: var(--color-status-running);
+}
+
 .status-queued {
   color: var(--color-status-warning);
 }
@@ -629,7 +678,8 @@ button {
   color: var(--color-status-warning);
 }
 
-.status-running::before {
+.status-running::before,
+.status-canceling::before {
   box-shadow: 0 0 0 4px var(--color-status-running-subtle);
   animation: pulse 1.5s infinite;
 }
@@ -1550,6 +1600,12 @@ tbody tr:hover {
 
   .split-layout {
     grid-template-columns: 1fr;
+  }
+
+  .workflow-sidebar {
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 
   .panel.sticky {

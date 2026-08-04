@@ -1,7 +1,7 @@
 {
-  "version": "v0.1.11",
-  "buildNumber": 11,
-  "sourceCommit": "f1674b29eb1cfd4d73705fbcac399eb9aadaa3b3",
+  "version": "v0.1.12",
+  "buildNumber": 12,
+  "sourceCommit": "ce4ccf0a04c028d5eb6fc17f28dcc2fb46e812b0",
   "sourceBranch": "main",
-  "builtAt": "2026-08-04T04:14:44.483Z"
+  "builtAt": "2026-08-04T06:06:46.671Z"
 }
