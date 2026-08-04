@@ -1126,8 +1126,9 @@ async function renderWorkflow(workflowId) {
       </div>
     </section>
     <div class="split-layout">
-      <section>
-        <div class="section-header"><div><h2>실행 단계</h2><p>입력을 멈추거나 다른 곳으로 이동하면 자동 저장됩니다. 위·아래 버튼으로 실행 순서를 변경합니다.</p></div></div>
+      <section aria-labelledby="workflow-steps-title" aria-describedby="workflow-steps-help">
+        <h2 class="visually-hidden" id="workflow-steps-title">실행 단계</h2>
+        <p class="visually-hidden" id="workflow-steps-help">입력을 멈추거나 다른 곳으로 이동하면 자동 저장됩니다. 위·아래 버튼으로 실행 순서를 변경합니다.</p>
         <div class="step-list" id="step-list">
           ${
             workflow.steps.length
