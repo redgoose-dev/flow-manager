@@ -2941,13 +2941,14 @@ class SecretRedactor {
 class WorkflowRunner {
   db;
   controls = new Map;
+  executions = new Map;
   subscribers = new Map;
   constructor(db) {
     this.db = db;
   }
   start(workflowId) {
     const run = this.db.createRun(workflowId);
-    queueMicrotask(() => void this.execute(run.id));
+    this.scheduleExecution(run.id);
     return run;
   }
   respond(runId, requestId, value) {
@@ -2960,8 +2961,38 @@ class WorkflowRunner {
     this.log(runId, request.stepRunId, "system", `[workflow-manager] \uC785\uB825\uC744 \uBC1B\uC544 \uC2E4\uD589\uC744 \uC7AC\uAC1C\uD569\uB2C8\uB2E4. \uC785\uB825\uAC12\uC740 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.
 `);
     this.emitRun(runId);
-    queueMicrotask(() => void this.execute(runId, suppliedInput));
+    this.scheduleExecution(runId, suppliedInput);
     return this.db.getRun(runId);
+  }
+  async shutdown() {
+    const runIds = new Set([
+      ...this.controls.keys(),
+      ...this.executions.keys()
+    ]);
+    for (const runId of runIds) {
+      try {
+        const run = this.db.getRun(runId);
+        if (run && ["queued", "running", "waiting_input"].includes(run.status)) {
+          this.cancel(runId);
+        }
+      } catch {}
+    }
+    await this.waitForIdle();
+  }
+  scheduleExecution(runId, suppliedInput) {
+    const execution = Promise.resolve().then(() => this.execute(runId, suppliedInput));
+    this.executions.set(runId, execution);
+    execution.then(() => this.clearExecution(runId, execution), () => this.clearExecution(runId, execution));
+  }
+  clearExecution(runId, execution) {
+    if (this.executions.get(runId) === execution) {
+      this.executions.delete(runId);
+    }
+  }
+  async waitForIdle() {
+    while (this.executions.size) {
+      await Promise.allSettled(this.executions.values());
+    }
   }
   cancel(runId) {
     const run = this.db.getRun(runId);
