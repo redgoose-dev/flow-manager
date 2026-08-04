@@ -421,9 +421,6 @@ button {
   position: sticky;
   top: 84px;
   align-self: start;
-  max-height: calc(100vh - 100px);
-  overflow-y: auto;
-  scrollbar-gutter: stable;
 }
 
 .workflow-run-panel {
@@ -1604,8 +1601,6 @@ tbody tr:hover {
 
   .workflow-sidebar {
     position: static;
-    max-height: none;
-    overflow: visible;
   }
 
   .panel.sticky {
