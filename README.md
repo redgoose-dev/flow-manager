@@ -78,6 +78,7 @@ bun run release:push
 | `WORKFLOW_MANAGER_RP_ID` | `localhost` | 패스키 Relying Party ID. 서비스 도메인 또는 그 상위 도메인 |
 | `WORKFLOW_MANAGER_RP_NAME` | 서비스 이름 | 패스키 등록 화면에 표시할 서비스 이름 |
 | `WORKFLOW_MANAGER_ORIGIN` | `http://localhost:<PORT>` | 패스키를 등록·사용할 정확한 origin |
+| `WORKFLOW_MANAGER_SESSION_TTL_HOURS` | `12` | 패스키 로그인 세션 유지 시간(1~720시간, 서버 재시작 필요) |
 
 헤더의 `환경설정` 화면에서는 서비스 이름·헤더 보조 문구·홈 제목·설명을 즉시 변경할 수 있습니다. 접근 범위와 데이터 디렉터리는 기본적으로 현재 작업 디렉터리의 `.env`에 저장된 뒤 서버를 재시작하면 적용됩니다. 서비스 관리자에서 작업 디렉터리가 달라질 때는 `WORKFLOW_MANAGER_CONFIG_FILE`로 읽고 쓸 `.env` 경로를 지정하세요. `HOST`, `PORT`, `WORKFLOW_MANAGER_DB`는 화면에 노출하지 않으며 `.env`나 서버 실행 환경에서 직접 관리합니다. 그 밖의 프로세스 환경 변수와 비밀값도 화면과 API에 노출하지 않습니다.
 
@@ -96,7 +97,7 @@ HOST=127.0.0.1 WORKFLOW_MANAGER_ACCESS_MODE=local bun run start
 
 ## 패스키 인증
 
-FlowManager는 비밀번호 없이 패스키만으로 로그인합니다. 등록된 공개키와 서명 카운터는 SQLite에 저장하며 개인키는 사용자의 기기 또는 패스키 제공자 밖으로 나오지 않습니다. 로그인 후에는 12시간 유효한 `HttpOnly`, `SameSite=Strict` 세션 쿠키를 사용하고, 상태 변경 API는 세션별 CSRF 토큰과 요청 origin을 함께 검사합니다.
+FlowManager는 비밀번호 없이 패스키만으로 로그인합니다. 등록된 공개키와 서명 카운터는 SQLite에 저장하며 개인키는 사용자의 기기 또는 패스키 제공자 밖으로 나오지 않습니다. 로그인 후에는 기본 12시간 유효한 `HttpOnly`, `SameSite=Strict` 세션 쿠키를 사용합니다. 유지 시간은 `WORKFLOW_MANAGER_SESSION_TTL_HOURS`에 1~720 사이의 정수(시간)를 지정해 조절할 수 있으며, 변경 후 서버를 재시작해야 합니다. 상태 변경 API는 세션별 CSRF 토큰과 요청 origin을 함께 검사합니다.
 
 로컬에서는 브라우저가 보안 컨텍스트로 취급하는 `http://localhost`에서 패스키를 테스트할 수 있습니다. `http://192.168.x.x` 같은 내부 IP 주소는 패스키 origin으로 사용할 수 없습니다. 다른 내부 기기에서 접속할 때는 고정된 사내 DNS 이름과 HTTPS를 준비하고 다음처럼 설정합니다.
 

@@ -12,7 +12,7 @@ import {
   parseAccessMode,
   privateNetworkUrls,
 } from "./server/network-access";
-import { PasskeyAuth } from "./server/passkey-auth";
+import { parseSessionTtlHours, PasskeyAuth } from "./server/passkey-auth";
 
 const defaultDataDirectory = join(process.cwd(), "data");
 const defaultEnvironment: EnvironmentValues = {
@@ -76,12 +76,16 @@ const runner = new WorkflowRunner(db);
 const configuredPasskeyOrigin = environmentValue("WORKFLOW_MANAGER_ORIGIN");
 const passkeyOrigin =
   configuredPasskeyOrigin ?? `http://localhost:${port}`;
+const sessionTtlMs = parseSessionTtlHours(
+  environmentValue("WORKFLOW_MANAGER_SESSION_TTL_HOURS"),
+);
 const passkeyAuth = new PasskeyAuth(db, {
   rpID: environmentValue("WORKFLOW_MANAGER_RP_ID") ?? "localhost",
   rpName:
     environmentValue("WORKFLOW_MANAGER_RP_NAME") ??
     environmentSettings.applicationSettings().name,
   expectedOrigin: passkeyOrigin,
+  sessionTtlMs,
 });
 const app = createApp({
   db,

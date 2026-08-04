@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { AppDatabase } from "../src/db/database";
 import { AppError } from "../src/domain/types";
 import {
+  DEFAULT_SESSION_TTL_MS,
   PasskeyAuth,
+  parseSessionTtlHours,
   validatePasskeyConfig,
 } from "../src/server/passkey-auth";
 
@@ -31,6 +33,14 @@ afterEach(() => {
 });
 
 describe("Passkey 인증", () => {
+  test("세션 유지 시간 환경변수를 검증하고 기본값을 사용한다", () => {
+    expect(parseSessionTtlHours(undefined)).toBe(DEFAULT_SESSION_TTL_MS);
+    expect(parseSessionTtlHours("24")).toBe(24 * 60 * 60 * 1000);
+    expect(() => parseSessionTtlHours("0")).toThrow("1에서 720");
+    expect(() => parseSessionTtlHours("721")).toThrow("1에서 720");
+    expect(() => parseSessionTtlHours("12.5")).toThrow("정수");
+  });
+
   test("localhost HTTP와 실제 HTTPS origin만 허용한다", () => {
     expect(
       validatePasskeyConfig({
@@ -149,5 +159,38 @@ describe("Passkey 인증", () => {
     expect(issued.cookie).toContain("HttpOnly");
     expect(issued.cookie).toContain("SameSite=Strict");
     expect(issued.cookie).not.toContain("Secure");
+  });
+
+  test("설정한 세션 유지 시간을 쿠키와 데이터베이스에 적용한다", () => {
+    const db = database();
+    const { user } = db.createAuthUserWithPasskey(
+      {
+        username: "admin",
+        displayName: "관리자",
+        webauthnUserId: "dGVzdC11c2Vy",
+      },
+      credential("credential-1", "기기"),
+    );
+    const auth = new PasskeyAuth(
+      db,
+      {
+        rpID: "localhost",
+        rpName: "FlowManager",
+        expectedOrigin: "http://localhost",
+        sessionTtlMs: 24 * 60 * 60 * 1000,
+      },
+    );
+
+    const before = Date.now();
+    const issued = auth.issueSession(user.id);
+    const after = Date.now();
+    const stored = db.sqlite
+      .query("SELECT expires_at FROM auth_sessions")
+      .get() as { expires_at: string };
+    const expiresAt = Date.parse(stored.expires_at);
+
+    expect(issued.cookie).toContain("Max-Age=86400");
+    expect(expiresAt).toBeGreaterThanOrEqual(before + 24 * 60 * 60 * 1000);
+    expect(expiresAt).toBeLessThanOrEqual(after + 24 * 60 * 60 * 1000);
   });
 });

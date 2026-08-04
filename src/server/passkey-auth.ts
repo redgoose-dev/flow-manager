@@ -14,7 +14,9 @@ import { AppError } from "../domain/types";
 const SESSION_COOKIE = "workflow_manager_session";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const SETUP_TTL_MS = 15 * 60 * 1000;
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const SESSION_TTL_HOUR_MS = 60 * 60 * 1000;
+export const DEFAULT_SESSION_TTL_MS = 12 * SESSION_TTL_HOUR_MS;
+const MAX_SESSION_TTL_HOURS = 30 * 24;
 
 type RegistrationFlow = {
   challenge: string;
@@ -40,6 +42,7 @@ export type PasskeyAuthConfig = {
   rpID: string;
   rpName: string;
   expectedOrigin: string;
+  sessionTtlMs?: number;
 };
 
 export type IssuedSession = {
@@ -48,6 +51,24 @@ export type IssuedSession = {
   expiresAt: string;
   cookie: string;
 };
+
+export function parseSessionTtlHours(value: string | undefined) {
+  if (value === undefined || value.trim() === "") {
+    return DEFAULT_SESSION_TTL_MS;
+  }
+  if (!/^\d+$/.test(value.trim())) {
+    throw new Error(
+      "WORKFLOW_MANAGER_SESSION_TTL_HOURS는 1에서 720 사이의 정수여야 합니다.",
+    );
+  }
+  const hours = Number(value.trim());
+  if (hours < 1 || hours > MAX_SESSION_TTL_HOURS) {
+    throw new Error(
+      "WORKFLOW_MANAGER_SESSION_TTL_HOURS는 1에서 720 사이의 정수여야 합니다.",
+    );
+  }
+  return hours * SESSION_TTL_HOUR_MS;
+}
 
 function randomToken(bytes = 32) {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(bytes))).toString(
@@ -579,7 +600,8 @@ export class PasskeyAuth {
     const token = randomToken();
     const csrfToken = randomToken();
     const createdAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+    const sessionTtlMs = this.config.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
+    const expiresAt = new Date(Date.now() + sessionTtlMs).toISOString();
     this.db.createAuthSession({
       tokenHash: sha256(token),
       userId,
@@ -593,7 +615,7 @@ export class PasskeyAuth {
       csrfToken,
       expiresAt,
       cookie: `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(
-        SESSION_TTL_MS / 1000,
+        sessionTtlMs / 1000,
       )}${secure}`,
     };
   }
